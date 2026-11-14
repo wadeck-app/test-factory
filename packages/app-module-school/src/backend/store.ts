@@ -11,12 +11,16 @@ export interface CollectionStore<T extends StoredRecord = StoredRecord> {
   list(): T[];
   get(id: string): T | undefined;
   create(data: Omit<T, 'id'>): T;
+  insert(record: T): T;
   update(id: string, patch: Partial<Omit<T, 'id'>>): T | undefined;
   remove(id: string): boolean;
 }
 
 export interface Store {
   collection(name: CollectionName): CollectionStore;
+  // Marker telling the sample data was already written, so it is never written again.
+  isSeeded(): boolean;
+  markSeeded(): void;
 }
 
 function createCollectionStore(dataDir: string, name: CollectionName): CollectionStore {
@@ -39,6 +43,12 @@ function createCollectionStore(dataDir: string, name: CollectionName): Collectio
     create(data) {
       const records = read();
       const record = { ...data, id: randomUUID() } as StoredRecord;
+      records.push(record);
+      write(records);
+      return record;
+    },
+    insert(record) {
+      const records = read();
       records.push(record);
       write(records);
       return record;
@@ -67,8 +77,15 @@ function createCollectionStore(dataDir: string, name: CollectionName): Collectio
   };
 }
 
+export const SEEDED_MARKER = 'seeded.flag';
+
 export function createStore(dataDir: string): Store {
   return {
+    isSeeded: () => existsSync(join(dataDir, SEEDED_MARKER)),
+    markSeeded() {
+      mkdirSync(dataDir, { recursive: true });
+      writeFileSync(join(dataDir, SEEDED_MARKER), '', 'utf8');
+    },
     collection(name) {
       if (!(COLLECTIONS as readonly string[]).includes(name)) {
         throw new Error(`Unknown collection: ${name}`);

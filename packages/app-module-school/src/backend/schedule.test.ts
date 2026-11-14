@@ -1,9 +1,10 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ModuleContext } from '@wadeck-app/app-core-sdk';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import register from './index';
+import { SEEDED_MARKER } from './store';
 import { validateSchedule } from './schedule';
 
 type Handler = (req: { body?: unknown; params: Record<string, string> }, reply: FakeReply) => unknown;
@@ -27,6 +28,7 @@ function setup(dir: string) {
     dataDir: dir,
     registerRoute: (method: string, path: string, handler: Handler) => routes.set(`${method} ${path}`, handler),
   } as unknown as ModuleContext;
+  writeFileSync(join(dir, SEEDED_MARKER), '', 'utf8'); // these tests start from an empty module
   register(ctx);
   return (route: string, body?: unknown, id?: string) => {
     const reply = new FakeReply();
