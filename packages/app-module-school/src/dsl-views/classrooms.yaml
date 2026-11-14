@@ -1,0 +1,55 @@
+$sources:
+  classrooms:
+    url: GET /api/modules/school/classrooms
+
+$actions:
+  createClassroom:
+    url: POST /api/modules/school/classrooms
+    reloadSources: [classrooms]
+    successMessage: Classroom created
+  updateClassroom:
+    url: PUT /api/modules/school/classrooms/{id}
+    reloadSources: [classrooms]
+    resultKey: editing
+    successMessage: Classroom saved
+  editClassroom:
+    resultKey: editing
+  deleteClassroom:
+    url: DELETE /api/modules/school/classrooms/{id}
+    reloadSources: [classrooms]
+    confirm: Delete this classroom?
+    successMessage: Classroom deleted
+
+$type: VerticalStack
+items:
+  - $type: DataTable
+    rows: $sources.classrooms
+    emptyMessage: No classroom yet
+    onAction: $ctx.onAction
+    columns:
+      - { field: id, label: Id }
+      - { field: name, label: Name }
+      - { field: capacity, label: Capacity }
+      - { field: building, label: Building }
+      - type: actions
+        items:
+          - { label: Edit, action: editClassroom }
+          - { label: Delete, action: deleteClassroom, variant: danger }
+  - $type: Form
+    $if: $editing
+    initialData: $editing
+    onSubmit: $ctx.updateClassroom
+    fields:
+      - { $type: FieldText, bind: name, label: Name, required: true }
+      - { $type: FieldText, bind: capacity, label: Capacity, required: true }
+      - { $type: FieldText, bind: building, label: Building }
+    actions:
+      - { $type: ButtonSave, label: Save }
+  - $type: Form
+    onSubmit: $ctx.createClassroom
+    fields:
+      - { $type: FieldText, bind: name, label: Name, required: true }
+      - { $type: FieldText, bind: capacity, label: Capacity, required: true }
+      - { $type: FieldText, bind: building, label: Building }
+    actions:
+      - { $type: ButtonSave, label: Add classroom }
