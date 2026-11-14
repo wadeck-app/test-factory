@@ -1,5 +1,55 @@
 $sources:
   ping:
     url: GET /api/modules/school/ping
-$type: Badge
-label: $sources.ping.message
+  teachers:
+    url: GET /api/modules/school/teachers
+
+$actions:
+  createTeacher:
+    url: POST /api/modules/school/teachers
+    reloadSources: [teachers]
+    successMessage: Teacher created
+  updateTeacher:
+    url: PUT /api/modules/school/teachers/{id}
+    reloadSources: [teachers]
+    resultKey: editing
+    successMessage: Teacher saved
+  editTeacher:
+    resultKey: editing
+  deleteTeacher:
+    url: DELETE /api/modules/school/teachers/{id}
+    reloadSources: [teachers]
+    confirm: Delete this teacher?
+    successMessage: Teacher deleted
+
+$type: VerticalStack
+items:
+  - $type: Badge
+    label: $sources.ping.message
+  - $type: DataTable
+    rows: $sources.teachers
+    emptyMessage: No teacher yet
+    onAction: $ctx.onAction
+    columns:
+      - { field: name, label: Name }
+      - { field: subjects, label: Subjects }
+      - type: actions
+        items:
+          - { label: Edit, action: editTeacher }
+          - { label: Delete, action: deleteTeacher, variant: danger }
+  - $type: Form
+    $if: $editing
+    initialData: $editing
+    onSubmit: $ctx.updateTeacher
+    fields:
+      - { $type: FieldText, bind: name, label: Name, required: true }
+      - { $type: FieldText, bind: subjects, label: Subjects (comma separated), required: true }
+    actions:
+      - { $type: ButtonSave, label: Save }
+  - $type: Form
+    onSubmit: $ctx.createTeacher
+    fields:
+      - { $type: FieldText, bind: name, label: Name, required: true }
+      - { $type: FieldText, bind: subjects, label: Subjects (comma separated), required: true }
+    actions:
+      - { $type: ButtonSave, label: Add teacher }
