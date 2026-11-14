@@ -4,6 +4,7 @@ import { registerCourseRoutes } from './courses';
 import { registerScheduleRoutes } from './schedule';
 import { createStore } from './store';
 import { registerStudentClassRoutes } from './student-classes';
+import { registerSummaryRoutes } from './summary';
 import { registerTeacherRoutes } from './teachers';
 
 export default function register(ctx: ModuleContext): void {
@@ -14,4 +15,5 @@ export default function register(ctx: ModuleContext): void {
   registerStudentClassRoutes(ctx, store);
   registerCourseRoutes(ctx, store);
   registerScheduleRoutes(ctx, store);
+  registerSummaryRoutes(ctx, store);
 }
