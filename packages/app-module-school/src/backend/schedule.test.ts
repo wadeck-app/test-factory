@@ -147,6 +147,49 @@ describe('schedule routes', () => {
     expect(call('POST /schedule', entry(courseD, room2)).status).toBe(201);
   });
 
+  it('answers 409 when time ranges overlap, and accepts ranges that only touch', () => {
+    call('POST /schedule', entry(courseA, room, 'mon', '08:00-10:00'));
+    const partial = call('POST /schedule', entry(courseD, room, 'mon', '09:00-10:00'));
+    expect(partial.status).toBe(409);
+    expect(messageOf(partial)).toContain('classroom conflict');
+    expect(call('POST /schedule', entry(courseD, room, 'mon', '09:00-11:00')).status).toBe(409);
+    expect(call('POST /schedule', entry(courseD, room, 'mon', '07:00-12:00')).status).toBe(409);
+    expect(call('GET /schedule').payload).toHaveLength(1);
+    expect(call('POST /schedule', entry(courseD, room, 'tue', '09:00-10:00')).status).toBe(201);
+    expect(call('POST /schedule', entry(courseD, room, 'mon', '10:00-12:00')).status).toBe(201);
+  });
+
+  it('applies the overlap rule to teachers and student classes', () => {
+    call('POST /schedule', entry(courseA, room, 'mon', '08:00-10:00'));
+    const teacher = call('POST /schedule', entry(courseB, room2, 'mon', '09:00-10:00'));
+    expect(teacher.status).toBe(409);
+    expect(messageOf(teacher)).toContain('teacher conflict');
+    const klass = call('POST /schedule', entry(courseC, room2, 'mon', '09:00-11:00'));
+    expect(klass.status).toBe(409);
+    expect(messageOf(klass)).toContain('class conflict');
+    expect(call('POST /schedule', entry(courseD, room2, 'mon', '09:00-11:00')).status).toBe(201);
+  });
+
+  it('checks overlaps on PUT, ignoring the entry itself', () => {
+    const id = idOf(call('POST /schedule', entry(courseA, room, 'mon', '08:00-10:00')));
+    call('POST /schedule', entry(courseD, room, 'mon', '10:00-12:00'));
+    expect(call('PUT /schedule/:id', entry(courseA, room, 'mon', '09:00-11:00'), id).status).toBe(409);
+    expect(call('PUT /schedule/:id', entry(courseA, room, 'mon', '08:00-09:00'), id).status).toBe(200);
+    const stored = (call('GET /schedule').payload as { id: string; slot: string }[]).find((e) => e.id === id);
+    expect(stored?.slot).toBe('08:00-09:00');
+  });
+
+  it('answers 400 when the end is not after the start', () => {
+    const message = 'slot must be HH:MM-HH:MM with the start before the end';
+    const id = idOf(call('POST /schedule', entry(courseA, room)));
+    for (const slot of ['10:00-10:00', '10:00-09:00', '9-10']) {
+      const created = call('POST /schedule', entry(courseA, room, 'tue', slot));
+      expect(created.status).toBe(400);
+      expect(messageOf(created)).toBe(message);
+      expect(call('PUT /schedule/:id', entry(courseA, room, 'tue', slot), id).status).toBe(400);
+    }
+  });
+
   it('answers 409 when the classroom capacity is below the student count', () => {
     const refused = call('POST /schedule', entry(courseA, smallRoom));
     expect(refused.status).toBe(409);

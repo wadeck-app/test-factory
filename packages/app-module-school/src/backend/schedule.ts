@@ -75,6 +75,20 @@ export interface Lookups {
   studentClass(id: string): StudentClassRef | undefined;
 }
 
+// Two HH:MM-HH:MM ranges overlap when each starts before the other ends (touching ends do not overlap).
+// Zero-padded HH:MM strings compare correctly as text; a malformed stored slot only overlaps an identical one.
+export function slotsOverlap(a: string, b: string): boolean {
+  const ma = SLOT_PATTERN.exec(a);
+  const mb = SLOT_PATTERN.exec(b);
+  if (!ma || !mb) {
+    return a === b;
+  }
+  const range = (m: RegExpExecArray) => ({ start: `${m[1]}${m[2]}`, end: `${m[3]}${m[4]}` });
+  const ra = range(ma);
+  const rb = range(mb);
+  return ra.start < rb.end && rb.start < ra.end;
+}
+
 // Returns the message of the first conflict (classroom, teacher, class, then capacity), if any.
 // `entries` must not contain the candidate itself when it is being updated.
 export function findConflict(entries: ScheduleEntry[], candidate: ScheduleInput, lookups: Lookups): string | undefined {
@@ -84,7 +98,7 @@ export function findConflict(entries: ScheduleEntry[], candidate: ScheduleInput,
     return undefined;
   }
   const when = `on ${candidate.day} at ${candidate.slot}`;
-  const sameTime = entries.filter((e) => e.day === candidate.day && e.slot === candidate.slot);
+  const sameTime = entries.filter((e) => e.day === candidate.day && slotsOverlap(e.slot, candidate.slot));
 
   const roomClash = sameTime.find((e) => e.classroomId === candidate.classroomId);
   if (roomClash) {
