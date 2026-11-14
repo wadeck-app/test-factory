@@ -31,3 +31,12 @@ describe('teachers page', () => {
     expect(home.match(/StatTile/g)).toHaveLength(4);
   });
 });
+
+describe('courses page', () => {
+  it('chooses the subject among the subjects of the selected teacher', () => {
+    const view = read('src/dsl-views/courses.yaml');
+    expect(view).toContain('GET /api/modules/school/subject-options/{teacherId}');
+    expect(view).not.toContain('FieldText');
+    expect(view.match(/bind: subject, label: Subject, options: \$sources\.subjectOptions/g)).toHaveLength(2);
+  });
+});

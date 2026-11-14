@@ -3,6 +3,9 @@ $sources:
     url: GET /api/modules/school/course-rows
   teacherOptions:
     url: GET /api/modules/school/teacher-options
+  subjectOptions:
+    url: GET /api/modules/school/subject-options/{teacherId}
+    dependsOn: teacherId
   classOptions:
     url: GET /api/modules/school/student-class-options
 
@@ -43,7 +46,7 @@ items:
     initialData: $editing
     onSubmit: $ctx.updateCourse
     fields:
-      - { $type: FieldText, bind: subject, label: Subject, required: true }
+      - { $type: FieldSelect, bind: subject, label: Subject, options: $sources.subjectOptions, placeholder: Select a subject, required: true }
       - { $type: FieldSelect, bind: teacherId, label: Teacher, options: $sources.teacherOptions, placeholder: Select a teacher, required: true }
       - { $type: FieldSelect, bind: studentClassId, label: Class, options: $sources.classOptions, placeholder: Select a class, required: true }
     actions:
@@ -51,7 +54,7 @@ items:
   - $type: Form
     onSubmit: $ctx.createCourse
     fields:
-      - { $type: FieldText, bind: subject, label: Subject, required: true }
+      - { $type: FieldSelect, bind: subject, label: Subject, options: $sources.subjectOptions, placeholder: Select a subject, required: true }
       - { $type: FieldSelect, bind: teacherId, label: Teacher, options: $sources.teacherOptions, placeholder: Select a teacher, required: true }
       - { $type: FieldSelect, bind: studentClassId, label: Class, options: $sources.classOptions, placeholder: Select a class, required: true }
     actions:

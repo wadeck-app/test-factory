@@ -102,6 +102,17 @@ export function registerCourseRoutes(ctx: ModuleContext, store: Store): void {
     listStudentClasses(store).map((k) => ({ value: k.id, label: k.name })),
   );
 
+  // Subjects of one teacher; the bare path is the "no teacher chosen yet" call of the form.
+  ctx.registerRoute('GET', '/subject-options', (_req, reply) => badRequest(reply, 'teacher id is required'));
+  ctx.registerRoute('GET', '/subject-options/:id', (req, reply) => {
+    const teacher = listTeachers(store).find((t) => t.id === req.params.id);
+    if (!teacher) {
+      return notFound(reply, 'teacher not found');
+    }
+    const subjects = Array.isArray(teacher.subjects) ? teacher.subjects : [];
+    return reply.send(subjects.map((s) => ({ value: s, label: s })));
+  });
+
   ctx.registerRoute('POST', '/courses', (req, reply) => {
     const result = validateCourse(req.body);
     if (!result.ok) {
