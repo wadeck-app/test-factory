@@ -1,24 +1,15 @@
 import type { ModuleContext } from '@wadeck-app/app-core-sdk';
 import { countScheduleEntriesForClassroom, findClassroomConflict, usedByEntriesMessage } from './schedule';
-import { badRequest, notFound, refuseConflict, deleted } from './http';
+import { type Validation, badRequest, bodyAsObject, notFound, refuseConflict, deleted } from './http';
 import type { CollectionStore, Store } from './store';
+import type { Classroom, ClassroomInput } from './types';
 
-export interface Classroom {
-  id: string;
-  name: string;
-  capacity: number;
-  building: string;
-}
-
-export type ClassroomInput = Omit<Classroom, 'id'>;
-
-type Validation = { ok: true; value: ClassroomInput } | { ok: false; message: string };
+export type { Classroom, ClassroomInput };
 
 // `capacity` must be a positive integer; a numeric string (as sent by the form) is accepted.
 // `building` is optional and defaults to an empty string.
-export function validateClassroom(body: unknown): Validation {
-  const data: { name?: unknown; capacity?: unknown; building?: unknown } =
-    typeof body === 'object' && body !== null ? body : {};
+export function validateClassroom(body: unknown): Validation<ClassroomInput> {
+  const data = bodyAsObject(body);
   if (typeof data.name !== 'string' || data.name.trim() === '') {
     return { ok: false, message: 'name is required' };
   }

@@ -1,24 +1,27 @@
 import type { ModuleContext } from '@wadeck-app/app-core-sdk';
 import { countScheduleEntriesForCourse, findCourseConflict, usedByEntriesMessage } from './schedule';
-import { NOT_FOUND, type Refusal, UNPROCESSABLE, refuse } from './http';
-import { badRequest, notFound, refuseConflict, deleted } from './http';
+import {
+  NOT_FOUND,
+  type Refusal,
+  UNPROCESSABLE,
+  type Validation,
+  badRequest,
+  bodyAsObject,
+  deleted,
+  notFound,
+  refuse,
+  refuseConflict,
+  registerOptions,
+} from './http';
+import { listCourses, listStudentClasses, listTeachers } from './records';
 import type { CollectionStore, Store } from './store';
+import type { Course, CourseInput } from './types';
 
-export interface Course {
-  id: string;
-  subject: string;
-  teacherId: string;
-  studentClassId: string;
-}
-
-export type CourseInput = Omit<Course, 'id'>;
-
-type Validation = { ok: true; value: CourseInput } | { ok: false; message: string };
+export type { Course, CourseInput };
 
 // `subject`, `teacherId` and `studentClassId` are non-empty strings.
-export function validateCourse(body: unknown): Validation {
-  const data: { subject?: unknown; teacherId?: unknown; studentClassId?: unknown } =
-    typeof body === 'object' && body !== null ? body : {};
+export function validateCourse(body: unknown): Validation<CourseInput> {
+  const data = bodyAsObject(body);
   for (const field of ['subject', 'teacherId', 'studentClassId'] as const) {
     const value = data[field];
     if (typeof value !== 'string' || value.trim() === '') {
@@ -35,12 +38,9 @@ export function validateCourse(body: unknown): Validation {
   };
 }
 
-type Teacher = { id: string; name: string; subjects: string[] };
-type StudentClass = { id: string; name: string };
-
 // Checks that the referenced teacher and class exist and that the teacher teaches the subject.
 function checkReferences(store: Store, input: CourseInput): Refusal | undefined {
-  const teacher = store.collection('teachers').get(input.teacherId) as unknown as Teacher | undefined;
+  const teacher = listTeachers(store).find((t) => t.id === input.teacherId);
   if (!teacher) {
     return { status: NOT_FOUND, message: 'teacher not found' };
   }
@@ -59,8 +59,8 @@ export function isTeacherUsed(store: Store, teacherId: string): boolean {
 
 // Message naming the courses of the teacher whose subject is not in `subjects`, if any.
 export function findCourseWithRemovedSubject(store: Store, teacherId: string, subjects: string[]): string | undefined {
-  const classes = store.collection('classes').list() as unknown as StudentClass[];
-  const stranded = (store.collection('courses').list() as unknown as Course[]).filter(
+  const classes = listStudentClasses(store);
+  const stranded = listCourses(store).filter(
     (c) => c.teacherId === teacherId && !subjects.includes(c.subject),
   );
   if (stranded.length === 0) {
@@ -83,8 +83,8 @@ export function registerCourseRoutes(ctx: ModuleContext, store: Store): void {
 
   // Courses with resolved teacher and class names, for the page.
   ctx.registerRoute('GET', '/course-rows', (_req, reply) => {
-    const teachers = store.collection('teachers').list() as unknown as Teacher[];
-    const classes = store.collection('classes').list() as unknown as StudentClass[];
+    const teachers = listTeachers(store);
+    const classes = listStudentClasses(store);
     return reply.send(
       courses()
         .list()
@@ -97,13 +97,9 @@ export function registerCourseRoutes(ctx: ModuleContext, store: Store): void {
   });
 
   // `{ value, label }` lists for the selects of the form.
-  ctx.registerRoute('GET', '/teacher-options', (_req, reply) =>
-    reply.send((store.collection('teachers').list() as unknown as Teacher[]).map((t) => ({ value: t.id, label: t.name }))),
-  );
-  ctx.registerRoute('GET', '/student-class-options', (_req, reply) =>
-    reply.send(
-      (store.collection('classes').list() as unknown as StudentClass[]).map((k) => ({ value: k.id, label: k.name })),
-    ),
+  registerOptions(ctx, '/teacher-options', () => listTeachers(store).map((t) => ({ value: t.id, label: t.name })));
+  registerOptions(ctx, '/student-class-options', () =>
+    listStudentClasses(store).map((k) => ({ value: k.id, label: k.name })),
   );
 
   ctx.registerRoute('POST', '/courses', (req, reply) => {

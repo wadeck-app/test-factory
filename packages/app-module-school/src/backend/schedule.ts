@@ -1,6 +1,7 @@
 import type { ModuleContext } from '@wadeck-app/app-core-sdk';
 import { CONFLICT, NOT_FOUND, type Refusal, refuse } from './http';
-import { badRequest, notFound, deleted } from './http';
+import { type Validation, badRequest, bodyAsObject, notFound, deleted, registerOptions } from './http';
+import { listClassrooms, listCourses } from './records';
 import type { CollectionStore, Store } from './store';
 
 export const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri'] as const;
@@ -22,14 +23,11 @@ export interface ScheduleEntry {
 
 export type ScheduleInput = Omit<ScheduleEntry, 'id'>;
 
-type Validation = { ok: true; value: ScheduleInput } | { ok: false; message: string };
-
 const SLOT_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)-([01]\d|2[0-3]):([0-5]\d)$/;
 
 // `courseId` and `classroomId` are non-empty strings, `day` is mon..fri, `slot` is HH:MM-HH:MM with start before end.
-export function validateSchedule(body: unknown): Validation {
-  const data: { courseId?: unknown; classroomId?: unknown; day?: unknown; slot?: unknown } =
-    typeof body === 'object' && body !== null ? body : {};
+export function validateSchedule(body: unknown): Validation<ScheduleInput> {
+  const data = bodyAsObject(body);
   for (const field of ['courseId', 'classroomId'] as const) {
     const value = data[field];
     if (typeof value !== 'string' || value.trim() === '') {
@@ -248,21 +246,15 @@ export function registerScheduleRoutes(ctx: ModuleContext, store: Store): void {
   );
 
   // `{ value, label }` lists for the selects of the form.
-  ctx.registerRoute('GET', '/course-options', (_req, reply) =>
-    reply.send(
-      (store.collection('courses').list() as unknown as (CourseRef & { subject: string })[]).map((c) => ({
-        value: c.id,
-        label: `${c.subject} - ${lookups.studentClass(c.studentClassId)?.name ?? '?'}`,
-      })),
-    ),
+  registerOptions(ctx, '/course-options', () =>
+    listCourses(store).map((c) => ({
+      value: c.id,
+      label: `${c.subject} - ${lookups.studentClass(c.studentClassId)?.name ?? '?'}`,
+    })),
   );
-  ctx.registerRoute('GET', '/classroom-options', (_req, reply) =>
-    reply.send(
-      (store.collection('classrooms').list() as unknown as ClassroomRef[]).map((c) => ({ value: c.id, label: c.name })),
-    ),
-  );
-  ctx.registerRoute('GET', '/day-options', (_req, reply) => reply.send(DAY_OPTIONS));
-  ctx.registerRoute('GET', '/slot-options', (_req, reply) => reply.send(SLOT_OPTIONS));
+  registerOptions(ctx, '/classroom-options', () => listClassrooms(store).map((c) => ({ value: c.id, label: c.name })));
+  registerOptions(ctx, '/day-options', () => DAY_OPTIONS);
+  registerOptions(ctx, '/slot-options', () => SLOT_OPTIONS);
 
   ctx.registerRoute('POST', '/schedule', (req, reply) => {
     const result = validateSchedule(req.body);

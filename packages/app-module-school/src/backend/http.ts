@@ -33,6 +33,22 @@ export const notFound = (reply: Sender, message: string): unknown => refuse(repl
 
 export const refuseConflict = (reply: Sender, message: string): unknown => refuse(reply, refusal(CONFLICT, message));
 
+export type Validation<T> = { ok: true; value: T } | { ok: false; message: string };
+
+// The body of a request as an object of unknown fields (empty when it is not an object).
+export const bodyAsObject = (body: unknown): Record<string, unknown> =>
+  typeof body === 'object' && body !== null ? { ...body } : {};
+
+export interface Option {
+  value: string;
+  label: string;
+}
+
+// GET `path` answering a `{ value, label }` list, for the selects of the forms.
+export function registerOptions(ctx: ModuleContext, path: string, options: () => Option[]): void {
+  ctx.registerRoute('GET', path, (_req, reply) => reply.send(options()));
+}
+
 export const deleted = (reply: Sender, id: string): unknown => reply.send({ deleted: id });
 
 export const SERVER_ERROR = 500;
