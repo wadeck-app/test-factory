@@ -6,7 +6,7 @@
 // which `task next` honours. Titles come from a model and go on a command line (Windows cmd shim): they are reduced to a safe character
 // set; descriptions go through stdin.
 import fs from 'node:fs';
-import { assertPlainId, fail, parseJson, project, projectDirectory, runChecked, showExecution, task } from './factory.mjs';
+import { assertPlainId, fail, parseJson, project, projectDirectory, runChecked, showExecution, syncReaderClone, task } from './factory.mjs';
 
 const PRIORITIES = ['urgent', 'high', 'medium', 'low'];
 const MAX_TASKS = 12;
@@ -31,6 +31,12 @@ goal = goal.trim();
 if (goal === '') fail(`the goal is empty. ${usage}`);
 if (Buffer.byteLength(goal, 'utf8') > MAX_GOAL_BYTES) fail(`the goal is ${Buffer.byteLength(goal, 'utf8')} bytes, the limit is ${MAX_GOAL_BYTES}: shorten it or split it in two runs.`);
 
+// The PM must see what is already built: put the reader clone on the current integration branch first.
+try {
+	console.log(`pm: reader clone on integration at ${syncReaderClone()}`);
+} catch (error) {
+	fail(error.message);
+}
 const encoded = Buffer.from(goal, 'utf8').toString('base64');
 const started = parseJson(runChecked('flow', ['run', 'flows/00_pm.yml', '-i', `goalB64=${encoded}`, '-p', project, '--json']), 'flow run --json');
 const executionId = assertPlainId(started.executionId, 'execution id');

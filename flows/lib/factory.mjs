@@ -64,6 +64,16 @@ export function completeResponse(record, stepId) {
 	return answer.text;
 }
 
+// The read-only analyst flows (triage, plan, PM) use the pool `<project folder>_ro` with ONE clone, named `<project folder>_ro1`.
+// They cannot update it themselves (profile inspect refuses host steps): call this before starting one. Throws an Error with the cause.
+export function syncReaderClone() {
+	const clone = path.join(path.dirname(projectDirectory), `${path.basename(projectDirectory)}_ro1`);
+	if (!fs.existsSync(path.join(clone, '.git'))) throw new Error(`the reader clone ${clone} does not exist (or is not a dedicated clone). It is created by the first analyst run: run \`flow run flows/01_triage.yml\` once, or clone the repository there.`);
+	const result = run('bash', [path.join(projectDirectory, 'flows', 'lib', 'sync-reader.sh').replaceAll('\\', '/')], undefined, clone);
+	if (result.status !== 0) throw new Error(`cannot put the reader clone ${clone} on origin/integration (exit ${result.status}). ${result.stderr}${result.stdout}`);
+	return result.stdout.trim();
+}
+
 export function task(args, input) {
 	return runChecked('task', [...args, '-p', project], input);
 }

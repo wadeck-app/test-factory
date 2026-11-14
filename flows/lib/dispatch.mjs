@@ -11,7 +11,7 @@
 //   FACTORY_PROJECT         task/flow project name (default test-factory)
 import fs from 'node:fs';
 import path from 'node:path';
-import { assertPlainId, fail, parseJson, park, project, projectDirectory, recordActiveRun, run, runChecked, task } from './factory.mjs';
+import { assertPlainId, fail, parseJson, park, project, projectDirectory, recordActiveRun, run, runChecked, syncReaderClone, task } from './factory.mjs';
 import { BUILD_FLOWS, BUILD_KINDS } from './kinds.mjs';
 
 const usage = 'Usage: node flows/lib/dispatch.mjs [--dry-run] [--roles integrate,build,plan,triage]';
@@ -109,6 +109,14 @@ function startRun(role, claim) {
 	const taskId = assertPlainId(claim.taskId, 'claimed task id');
 	const inputs = ['-i', `taskId=${taskId}`];
 	if (role.text) {
+		// The analyst must read the code as it is on integration now: its flow cannot update its clone.
+		try {
+			syncReaderClone();
+		} catch (error) {
+			task(['release', taskId, '--as', role.worker]);
+			console.error(`dispatch: ${role.name} for task ${taskId} not started, the task was released: ${error.message}`);
+			return 'failed';
+		}
 		const title = claim.task?.title ?? '';
 		const description = claim.task?.description ?? '';
 		const encoded = Buffer.from(description === '' || description === title ? title : `${title}\n\n${description}`, 'utf8').toString('base64');
