@@ -1,0 +1,55 @@
+$sources:
+  grid:
+    url: GET /api/modules/school/schedule-grid
+  entries:
+    url: GET /api/modules/school/schedule-entries
+  courseOptions:
+    url: GET /api/modules/school/course-options
+  classroomOptions:
+    url: GET /api/modules/school/classroom-options
+  dayOptions:
+    url: GET /api/modules/school/day-options
+  slotOptions:
+    url: GET /api/modules/school/slot-options
+
+$actions:
+  createEntry:
+    url: POST /api/modules/school/schedule
+    reloadSources: [grid, entries]
+    successMessage: Entry added
+  deleteEntry:
+    url: DELETE /api/modules/school/schedule/{id}
+    reloadSources: [grid, entries]
+    confirm: Delete this entry?
+    successMessage: Entry deleted
+
+$type: VerticalStack
+items:
+  - $type: DataTable
+    rows: $sources.grid
+    emptyMessage: No slot
+    columns:
+      - { field: slot, label: Slot }
+      - { field: mon, label: Mon }
+      - { field: tue, label: Tue }
+      - { field: wed, label: Wed }
+      - { field: thu, label: Thu }
+      - { field: fri, label: Fri }
+  - $type: DataTable
+    rows: $sources.entries
+    emptyMessage: No entry yet
+    onAction: $ctx.onAction
+    columns:
+      - { field: label, label: Entry }
+      - type: actions
+        items:
+          - { label: Delete, action: deleteEntry, variant: danger }
+  - $type: Form
+    onSubmit: $ctx.createEntry
+    fields:
+      - { $type: FieldSelect, bind: courseId, label: Course, options: $sources.courseOptions, placeholder: Select a course, required: true }
+      - { $type: FieldSelect, bind: classroomId, label: Classroom, options: $sources.classroomOptions, placeholder: Select a classroom, required: true }
+      - { $type: FieldSelect, bind: day, label: Day, options: $sources.dayOptions, placeholder: Select a day, required: true }
+      - { $type: FieldSelect, bind: slot, label: Slot, options: $sources.slotOptions, placeholder: Select a slot, required: true }
+    actions:
+      - { $type: ButtonSave, label: Add entry }

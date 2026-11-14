@@ -168,6 +168,25 @@ describe('schedule routes', () => {
     expect(call('POST /schedule', entry(courseA, 'nope')).status).toBe(400);
   });
 
+  it('builds the grid, the entries list and the options', () => {
+    const id = idOf(call('POST /schedule', entry(courseA, room, 'tue', '09:00-10:00')));
+    call('POST /schedule', entry(courseD, room2, 'tue', '09:00-10:00'));
+    call('POST /schedule', entry(courseA, room, 'fri', '14:00-15:00'));
+    const grid = call('GET /schedule-grid').payload as Record<string, string>[];
+    expect(grid.map((r) => r.slot)).toEqual(['08:00-09:00', '09:00-10:00', '10:00-11:00', '11:00-12:00', '14:00-15:00']);
+    expect(grid[0]).toEqual({ slot: '08:00-09:00', mon: '', tue: '', wed: '', thu: '', fri: '' });
+    expect(grid[1].tue).toBe('Math / Ada / 6A / R1; Math / Bob / 6B / R2');
+    expect(grid[4].fri).toBe('Math / Ada / 6A / R1');
+
+    const entries = call('GET /schedule-entries').payload as { id: string; label: string }[];
+    expect(entries[0]).toMatchObject({ id, label: 'Tue 09:00-10:00 - Math / Ada / 6A / R1' });
+
+    expect(call('GET /course-options').payload).toContainEqual({ value: courseA, label: 'Math - 6A' });
+    expect(call('GET /classroom-options').payload).toContainEqual({ value: room, label: 'R1' });
+    expect(call('GET /day-options').payload).toHaveLength(5);
+    expect(call('GET /slot-options').payload).toHaveLength(4);
+  });
+
   it('answers 404 for an unknown entry', () => {
     expect(call('PUT /schedule/:id', entry(courseA, room), 'nope').status).toBe(404);
     expect(call('DELETE /schedule/:id', undefined, 'nope').status).toBe(404);
