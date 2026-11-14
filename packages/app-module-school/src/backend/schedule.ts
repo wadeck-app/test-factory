@@ -113,6 +113,18 @@ export function storeLookups(store: Store): Lookups {
   };
 }
 
+const entriesWhere = (store: Store, key: 'courseId' | 'classroomId', id: string): number =>
+  (store.collection('slots').list() as unknown as ScheduleEntry[]).filter((e) => e[key] === id).length;
+
+export const countScheduleEntriesForClassroom = (store: Store, id: string): number => entriesWhere(store, 'classroomId', id);
+
+export const countScheduleEntriesForCourse = (store: Store, id: string): number => entriesWhere(store, 'courseId', id);
+
+// "classroom is used by 2 schedule entries"
+export function usedByEntriesMessage(what: string, count: number): string {
+  return `${what} is used by ${count} schedule ${count === 1 ? 'entry' : 'entries'}`;
+}
+
 export function registerScheduleRoutes(ctx: ModuleContext, store: Store): void {
   const slots = (): CollectionStore => store.collection('slots');
   const lookups = storeLookups(store);
