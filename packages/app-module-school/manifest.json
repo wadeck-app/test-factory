@@ -10,6 +10,15 @@
         "type": "path",
         "value": "./src/dsl-views/page.yaml"
       }
+    },
+    {
+      "kind": "page",
+      "slot": "nav",
+      "label": "Classrooms",
+      "view": {
+        "type": "path",
+        "value": "./src/dsl-views/classrooms.yaml"
+      }
     }
   ]
 }
