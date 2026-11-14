@@ -43,3 +43,6 @@ subscribers:
   #     command: node C:/Workspace_Tooling/_test-factory/flows/lib/dispatch.mjs
   #     when: payload.repository.full_name=wadeck-app/test-factory_issues
   #     timeout: 5m
+
+# Also ACTIVE (project scope): onTaskUnblocked -> dispatch.mjs (name test-factory-unblocked). `integrated` is a terminal status of the task
+# config, so closing a blocker (integration done) releases its dependents and this event wakes the dispatcher.

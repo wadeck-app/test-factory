@@ -7,6 +7,7 @@
 // Environment (all optional):
 //   FACTORY_BUILDERS        max build runs (feature, enhancement, bug) running or queued at once (default 1)
 //   FACTORY_ANALYSTS        max triage+plan runs running or queued at once (default 1: one read-only clone)
+//   FACTORY_SANDBOXES       max runs of all roles together = number of sandbox workers declared in flow (default 1)
 //   FACTORY_PROJECT         task/flow project name (default test-factory)
 import fs from 'node:fs';
 import path from 'node:path';
@@ -28,6 +29,7 @@ function capacityOf(variable, fallback) {
 }
 const builders = capacityOf('FACTORY_BUILDERS', 1);
 const analysts = capacityOf('FACTORY_ANALYSTS', 1);
+const sandboxes = capacityOf('FACTORY_SANDBOXES', 1);
 
 // Order matters: integrating a branch frees work, so it comes first. `pool` = the flows that compete for the same clones.
 const roles = [
@@ -132,11 +134,18 @@ process.on('exit', () => fs.rmSync(lockDirectory, { recursive: true, force: true
 const unknownRoles = (selectedRoles ?? []).filter((name) => !roles.some((role) => role.name === name));
 if (unknownRoles.length > 0) fail(`unknown role(s): ${unknownRoles.join(', ')}. Known: ${roles.map((role) => role.name).join(', ')}.`);
 
+// Every role runs in a sandbox and a sandbox worker serves ONE run at a time ("This worker already serves run ..."): a second run
+// fails at its first VM step. The total over all roles is therefore capped, whatever the capacity of each role.
+let sandboxRuns = activeRuns([...new Set(roles.flatMap((role) => role.pool))]);
 let started = 0;
 let failedRoles = 0;
 for (const role of roles.filter((candidate) => selectedRoles === undefined || selectedRoles.includes(candidate.name))) {
 	let active = activeRuns(role.pool);
 	while (active < role.capacity) {
+		if (sandboxRuns >= sandboxes) {
+			console.log(`dispatch: ${role.name}: the ${sandboxes} sandbox(es) are busy, the end of a run triggers the next dispatch.`);
+			break;
+		}
 		const claim = parseJson(runChecked('task', ['next', '--as', role.worker, '--status', role.status, '--lease', role.lease, '--fresh', '--json', '-p', project]), `task next (${role.name})`);
 		if (claim.task === null) {
 			if (claim.lost) console.log(`dispatch: ${role.name}: ${claim.lost} candidate(s) lost to another worker, the next event retries.`);
@@ -155,6 +164,7 @@ for (const role of roles.filter((candidate) => selectedRoles === undefined || se
 		if (outcome === 'started') {
 			started += 1;
 			active += 1;
+			sandboxRuns += 1;
 		}
 	}
 }
