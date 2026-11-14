@@ -32,6 +32,15 @@
     {
       "kind": "page",
       "slot": "nav",
+      "label": "Teachers",
+      "view": {
+        "type": "path",
+        "value": "./src/dsl-views/teachers.yaml"
+      }
+    },
+    {
+      "kind": "page",
+      "slot": "nav",
       "label": "Courses",
       "view": {
         "type": "path",
