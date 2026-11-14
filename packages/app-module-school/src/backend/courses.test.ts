@@ -126,4 +126,33 @@ describe('course routes', () => {
     expect(call('DELETE /student-classes/:id', undefined, classId).status).toBe(200);
     expect(call('DELETE /teachers/:id', undefined, teacherId).status).toBe(404);
   });
+
+  it('answers 409 when the new teacher or class of a course clashes with the schedule, and leaves it unchanged', () => {
+    const room1 = (call('POST /classrooms', { name: 'R1', capacity: 30 }).payload as { id: string }).id;
+    const room2 = (call('POST /classrooms', { name: 'R2', capacity: 30 }).payload as { id: string }).id;
+    const bob = (call('POST /teachers', { name: 'Bob', subjects: ['Math'] }).payload as { id: string }).id;
+    const classB = (call('POST /student-classes', { name: '6B', level: '6', studentCount: 20 }).payload as { id: string }).id;
+    const a = (call('POST /courses', valid()).payload as { id: string }).id;
+    const b = (call('POST /courses', { subject: 'Math', teacherId: bob, studentClassId: classB }).payload as { id: string }).id;
+    const slot = { day: 'mon', slot: '08:00-09:00' };
+    expect(call('POST /schedule', { courseId: a, classroomId: room1, ...slot }).status).toBe(201);
+    expect(call('POST /schedule', { courseId: b, classroomId: room2, ...slot }).status).toBe(201);
+
+    const teacherClash = call('PUT /courses/:id', { ...valid(), teacherId: bob }, a);
+    expect(teacherClash.status).toBe(409);
+    expect((teacherClash.payload as { message: string }).message).toContain('teacher conflict');
+    const classClash = call('PUT /courses/:id', { ...valid(), studentClassId: classB }, a);
+    expect(classClash.status).toBe(409);
+    expect((classClash.payload as { message: string }).message).toContain('class conflict');
+    expect((call('GET /courses').payload as unknown[])).toContainEqual({ id: a, ...valid() });
+
+    // capacity: a course moved to a class too big for its classroom
+    const big = (call('POST /student-classes', { name: '6C', level: '6', studentCount: 40 }).payload as { id: string }).id;
+    const capacity = call('PUT /courses/:id', { ...valid(), studentClassId: big }, a);
+    expect(capacity.status).toBe(409);
+    expect((capacity.payload as { message: string }).message).toContain('capacity conflict');
+
+    // a change that does not clash, and an unchanged re-save, succeed
+    expect(call('PUT /courses/:id', valid(), a).status).toBe(200);
+  });
 });

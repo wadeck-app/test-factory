@@ -163,6 +163,19 @@ describe('schedule routes', () => {
     expect(call('PUT /schedule/:id', entry(courseC, room2, 'mon'), id).status).toBe(409);
   });
 
+  it('moves an entry to a free slot and keeps it unchanged on a conflict', () => {
+    const id = idOf(call('POST /schedule', entry(courseA, room)));
+    call('POST /schedule', entry(courseD, room2, 'tue'));
+    const free = call('PUT /schedule/:id', entry(courseA, room, 'mon', '09:00-10:00'), id);
+    expect(free.status).toBe(200);
+    expect(call('PUT /schedule/:id', entry(courseA, room2, 'tue'), id).status).toBe(409);
+    expect(call('PUT /schedule/:id', entry(courseA, room, 'sun'), id).status).toBe(400);
+    expect(call('PUT /schedule/:id', entry('nope', room), id).status).toBe(400);
+    expect(call('PUT /schedule/:id', entry(courseA, 'nope'), id).status).toBe(400);
+    const stored = (call('GET /schedule').payload as { id: string }[]).find((e) => e.id === id);
+    expect(stored).toEqual({ id, ...entry(courseA, room, 'mon', '09:00-10:00') });
+  });
+
   it('answers 400 on invalid input and unknown references', () => {
     expect(call('POST /schedule', entry(courseA, room, 'sun')).status).toBe(400);
     expect(call('POST /schedule', entry(courseA, room, 'mon', 'noon')).status).toBe(400);

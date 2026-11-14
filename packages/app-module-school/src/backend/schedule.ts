@@ -113,6 +113,24 @@ export function storeLookups(store: Store): Lookups {
   };
 }
 
+// Returns the first conflict that `course` (an edited version of a stored course) would cause to its own schedule entries.
+export function findCourseConflict(store: Store, course: CourseRef): string | undefined {
+  const base = storeLookups(store);
+  const lookups: Lookups = { ...base, course: (id) => (id === course.id ? course : base.course(id)) };
+  const all = store.collection('slots').list() as unknown as ScheduleEntry[];
+  for (const entry of all.filter((e) => e.courseId === course.id)) {
+    const conflict = findConflict(
+      all.filter((e) => e.id !== entry.id),
+      entry,
+      lookups,
+    );
+    if (conflict) {
+      return conflict;
+    }
+  }
+  return undefined;
+}
+
 const entriesWhere = (store: Store, key: 'courseId' | 'classroomId', id: string): number =>
   (store.collection('slots').list() as unknown as ScheduleEntry[]).filter((e) => e[key] === id).length;
 
