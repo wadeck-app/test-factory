@@ -41,12 +41,20 @@ const roles = [
 
 // One dispatcher at a time: an atomic mkdir is the lock, a dead pid makes it stale.
 const lockDirectory = path.join(projectDirectory, '.flow', 'dispatcher.lock');
+// A dispatcher that finds the lock taken WAITS for it instead of leaving: the holder already looked at the backlog and may have
+// seen a state that is out of date by now (e.g. a run that was still ending), so its end would leave work nobody starts.
+const LOCK_WAIT_MS = 3 * 60 * 1000;
 function acquireLock() {
 	fs.mkdirSync(path.dirname(lockDirectory), { recursive: true });
-	try {
-		fs.mkdirSync(lockDirectory);
-	} catch (error) {
-		if (error.code !== 'EEXIST') throw error;
+	const deadline = Date.now() + LOCK_WAIT_MS;
+	let announced = false;
+	for (;;) {
+		try {
+			fs.mkdirSync(lockDirectory);
+			break;
+		} catch (error) {
+			if (error.code !== 'EEXIST') throw error;
+		}
 		const pidFile = path.join(lockDirectory, 'pid');
 		const holder = fs.existsSync(pidFile) ? Number(fs.readFileSync(pidFile, 'utf8')) : NaN;
 		let alive = false;
@@ -58,13 +66,26 @@ function acquireLock() {
 				alive = false;
 			}
 		}
-		if (alive) {
-			console.log(`dispatch: another dispatcher (pid ${holder}) is running, it will take the backlog.`);
-			process.exit(0);
+		// The pid file is written just after the directory is created: a lock younger than 5s without pid is being taken, not stale.
+		let young = false;
+		try {
+			young = Number.isNaN(holder) && Date.now() - fs.statSync(lockDirectory).mtimeMs < 5000;
+		} catch {
+			continue;
 		}
-		console.error(`dispatch: removing the stale lock of pid ${holder}`);
-		fs.rmSync(lockDirectory, { recursive: true });
-		fs.mkdirSync(lockDirectory);
+		if (young) {
+			Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 200);
+			continue;
+		}
+		if (!alive) {
+			console.error(`dispatch: removing the stale lock of pid ${holder}`);
+			fs.rmSync(lockDirectory, { recursive: true, force: true });
+			continue;
+		}
+		if (Date.now() > deadline) fail(`another dispatcher (pid ${holder}) has held the lock for more than ${LOCK_WAIT_MS / 1000}s. Look at it, then remove ${lockDirectory} if it is stuck.`);
+		if (!announced) console.log(`dispatch: another dispatcher (pid ${holder}) is running, waiting for it to finish before looking at the backlog.`);
+		announced = true;
+		Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
 	}
 	fs.writeFileSync(path.join(lockDirectory, 'pid'), String(process.pid));
 }
