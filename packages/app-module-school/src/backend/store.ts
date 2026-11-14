@@ -21,6 +21,10 @@ export interface Store {
   // Marker telling the sample data was already written, so it is never written again.
   isSeeded(): boolean;
   markSeeded(): void;
+  // "Seeding in progress" file, written before the first sample record and removed with the marker:
+  // without marker, its presence means the collections hold the leftovers of an interrupted seeding.
+  isSeeding(): boolean;
+  beginSeeding(): void;
 }
 
 // Thrown when a collection file cannot be used; the file is never modified in that case.
@@ -110,12 +114,20 @@ function createCollectionStore(dataDir: string, name: CollectionName): Collectio
 
 export const SEEDED_MARKER = 'seeded.flag';
 
+export const SEEDING_MARKER = 'seeding.flag';
+
 export function createStore(dataDir: string): Store {
   return {
     isSeeded: () => existsSync(join(dataDir, SEEDED_MARKER)),
+    isSeeding: () => existsSync(join(dataDir, SEEDING_MARKER)),
+    beginSeeding() {
+      mkdirSync(dataDir, { recursive: true });
+      writeFileSync(join(dataDir, SEEDING_MARKER), '', 'utf8');
+    },
     markSeeded() {
       mkdirSync(dataDir, { recursive: true });
       writeFileSync(join(dataDir, SEEDED_MARKER), '', 'utf8');
+      rmSync(join(dataDir, SEEDING_MARKER), { force: true });
     },
     collection(name) {
       if (!(COLLECTIONS as readonly string[]).includes(name)) {
