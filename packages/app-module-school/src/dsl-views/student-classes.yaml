@@ -1,0 +1,55 @@
+$sources:
+  studentClasses:
+    url: GET /api/modules/school/student-classes
+
+$actions:
+  createStudentClass:
+    url: POST /api/modules/school/student-classes
+    reloadSources: [studentClasses]
+    successMessage: Student class created
+  updateStudentClass:
+    url: PUT /api/modules/school/student-classes/{id}
+    reloadSources: [studentClasses]
+    resultKey: editing
+    successMessage: Student class saved
+  editStudentClass:
+    resultKey: editing
+  deleteStudentClass:
+    url: DELETE /api/modules/school/student-classes/{id}
+    reloadSources: [studentClasses]
+    confirm: Delete this student class?
+    successMessage: Student class deleted
+
+$type: VerticalStack
+items:
+  - $type: DataTable
+    rows: $sources.studentClasses
+    emptyMessage: No student class yet
+    onAction: $ctx.onAction
+    columns:
+      - { field: id, label: Id }
+      - { field: name, label: Name }
+      - { field: level, label: Level }
+      - { field: studentCount, label: Students }
+      - type: actions
+        items:
+          - { label: Edit, action: editStudentClass }
+          - { label: Delete, action: deleteStudentClass, variant: danger }
+  - $type: Form
+    $if: $editing
+    initialData: $editing
+    onSubmit: $ctx.updateStudentClass
+    fields:
+      - { $type: FieldText, bind: name, label: Name, required: true }
+      - { $type: FieldText, bind: level, label: Level, required: true }
+      - { $type: FieldNumber, bind: studentCount, label: Student count, min: 0, required: true }
+    actions:
+      - { $type: ButtonSave, label: Save }
+  - $type: Form
+    onSubmit: $ctx.createStudentClass
+    fields:
+      - { $type: FieldText, bind: name, label: Name, required: true }
+      - { $type: FieldText, bind: level, label: Level, required: true }
+      - { $type: FieldNumber, bind: studentCount, label: Student count, min: 0, required: true }
+    actions:
+      - { $type: ButtonSave, label: Add student class }

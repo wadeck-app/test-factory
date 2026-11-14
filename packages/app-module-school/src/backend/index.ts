@@ -1,6 +1,7 @@
 import type { ModuleContext } from '@wadeck-app/app-core-sdk';
 import { registerClassroomRoutes } from './classrooms';
 import { createStore } from './store';
+import { registerStudentClassRoutes } from './student-classes';
 import { registerTeacherRoutes } from './teachers';
 
 export default function register(ctx: ModuleContext): void {
@@ -8,4 +9,5 @@ export default function register(ctx: ModuleContext): void {
   const store = createStore(ctx.dataDir);
   registerTeacherRoutes(ctx, store);
   registerClassroomRoutes(ctx, store);
+  registerStudentClassRoutes(ctx, store);
 }

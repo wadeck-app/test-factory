@@ -19,6 +19,15 @@
         "type": "path",
         "value": "./src/dsl-views/classrooms.yaml"
       }
+    },
+    {
+      "kind": "page",
+      "slot": "nav",
+      "label": "Student classes",
+      "view": {
+        "type": "path",
+        "value": "./src/dsl-views/student-classes.yaml"
+      }
     }
   ]
 }
