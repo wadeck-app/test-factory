@@ -89,8 +89,22 @@ export function seedIfEmpty(store: Store): boolean {
     slots: SAMPLE_SLOTS,
   };
   const names = Object.keys(data) as (keyof typeof data)[];
-  if (store.isSeeded() || names.some((name) => store.collection(name).list().length > 0)) {
+  if (store.isSeeded()) {
     return false;
+  }
+  if (store.isSeeding()) {
+    // An earlier seeding was interrupted: its records are the only ones present, discard them.
+    // list() throws CorruptStoreError first, so a corrupt file is never overwritten.
+    for (const name of names) {
+      const collection = store.collection(name);
+      for (const record of collection.list()) {
+        collection.remove(record.id);
+      }
+    }
+  } else if (names.some((name) => store.collection(name).list().length > 0)) {
+    return false;
+  } else {
+    store.beginSeeding();
   }
   for (const name of names) {
     for (const record of data[name]) {

@@ -1,10 +1,17 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { type ScheduleEntry, DAYS, SLOTS, findConflict, storeLookups } from './schedule';
-import { seedIfEmpty } from './seed';
-import { createStore } from './store';
+import {
+  SAMPLE_CLASSROOMS,
+  SAMPLE_COURSES,
+  SAMPLE_SLOTS,
+  SAMPLE_STUDENT_CLASSES,
+  SAMPLE_TEACHERS,
+  seedIfEmpty,
+} from './seed';
+import { CorruptStoreError, type Store, createStore } from './store';
 
 let dir: string;
 beforeEach(() => {
@@ -49,6 +56,56 @@ describe('seedIfEmpty', () => {
     for (const { id: _id, ...entry } of entries) {
       expect(findConflict(placed, entry, lookups)).toBeUndefined();
       placed.push({ id: _id, ...entry });
+    }
+  });
+
+  it('starts again from empty collections after an interrupted seeding', () => {
+    const real = createStore(dir);
+    const interrupted: Store = {
+      ...real,
+      collection(name) {
+        const collection = real.collection(name);
+        if (name !== 'teachers') {
+          return collection;
+        }
+        return {
+          ...collection,
+          insert() {
+            throw new Error('interrupted');
+          },
+        };
+      },
+    };
+    expect(() => seedIfEmpty(interrupted)).toThrow('interrupted');
+    expect(real.isSeeded()).toBe(false);
+    expect(real.collection('classes').list()).toHaveLength(4);
+
+    const store = createStore(dir);
+    expect(seedIfEmpty(store)).toBe(true);
+    expect(store.collection('classrooms').list()).toEqual(SAMPLE_CLASSROOMS);
+    expect(store.collection('classes').list()).toEqual(SAMPLE_STUDENT_CLASSES);
+    expect(store.collection('teachers').list()).toEqual(SAMPLE_TEACHERS);
+    expect(store.collection('courses').list()).toEqual(SAMPLE_COURSES);
+    expect(store.collection('slots').list()).toEqual(SAMPLE_SLOTS);
+    expect(store.isSeeded()).toBe(true);
+    expect(seedIfEmpty(createStore(dir))).toBe(false);
+  });
+
+  it('does not wipe existing data without marker nor modify a corrupt file', () => {
+    const store = createStore(dir);
+    store.collection('teachers').insert({ id: 'mine', name: 'Mine' });
+    expect(seedIfEmpty(store)).toBe(false);
+    expect(store.collection('teachers').list()).toHaveLength(1);
+
+    const other = mkdtempSync(join(tmpdir(), 'school-seed-'));
+    try {
+      const s = createStore(other);
+      s.beginSeeding();
+      writeFileSync(join(other, 'classes.json'), '{oops', 'utf8');
+      expect(() => seedIfEmpty(s)).toThrow(CorruptStoreError);
+      expect(readFileSync(join(other, 'classes.json'), 'utf8')).toBe('{oops');
+    } finally {
+      rmSync(other, { recursive: true, force: true });
     }
   });
 
