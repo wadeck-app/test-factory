@@ -12,7 +12,7 @@
 # yet update the existing branch (merge integration into it) as the design requires. See the architecture plan.
 
 id: integrate
-version: '0.1.0'
+version: '0.1.1'
 name: 'Integrate a task branch'
 description: 'Merge the task branch into integration without conflict, run the gates, push integration'
 
@@ -64,6 +64,7 @@ steps:
   - id: gates
     name: 'Install, build, test, violations, app-module check on the merged tree (VM)'
     type: script
+    shell: bash
     depends: [prepare]
     secrets: [NPM_TOKEN]
     timeout: 600

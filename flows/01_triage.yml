@@ -1,0 +1,59 @@
+# Triage flow (read-only analyst): classify a new task and propose a priority. Manual run:
+#   flow run flows/01_triage.yml -i taskId=<id> -i taskB64=<base64 of "title\n\ndescription">
+#
+# profile: inspect = the slot is mounted read-only and host scripts are refused, so this flow cannot call `task` itself.
+# It only produces its answer as the output of step `classify`; flows/lib/publish-triage.mjs (host, run after the execution
+# completes) validates it and applies it to the task. The text arrives base64 encoded: the flow CLI only takes key=value
+# on a Windows command line (cmd shim), free text with quotes or new lines would break it.
+
+id: triage
+version: '0.1.2'
+name: 'Triage a task'
+description: 'Read-only analyst: type, priority and short summary of a new task'
+
+profile: inspect
+
+workspace: { provider: pool, dir: C:/Workspace_Tooling, prefix: _test-factory_ro, count: 1 }
+
+inputs:
+  taskId: text
+  taskB64: text
+
+steps:
+  - id: read_task
+    name: 'Decode the task text'
+    type: script
+    shell: bash
+    captureOutput: stdout
+    env:
+      TASK_B64: ${{ inputs.taskB64 }}
+      # Not used by the script: it records the task id in the execution so the publisher can find the task.
+      TASK_ID: ${{ inputs.taskId }}
+    script: |
+      set -euo pipefail
+      printf '%s' "$TASK_B64" | base64 -d
+
+  - id: classify
+    name: 'Classify the task'
+    type: model
+    model: sonnet
+    depends: [read_task]
+    tools: [read, glob, grep]
+    skipPermissions: true
+    output:
+      verdict:
+        type: string
+        from: last_message
+    prompt: |
+      You are the triage analyst of a software factory. Your working directory is a read-only clone of the product repository.
+      Read the task below, look at the repository only as much as needed to judge its size, then answer with ONE JSON object and nothing else
+      (no text before or after, no code fence):
+
+      {"type": "<feature|enhancement|bug|question|audit>", "priority": "<urgent|high|medium|low>", "summary": "<one sentence, English>", "reason": "<one sentence on type and priority>"}
+
+      Definitions: feature = new capability; enhancement = improves an existing capability; bug = something that should work and does not;
+      question = needs an answer, no code; audit = needs a review or report, no code.
+      Priority: urgent = blocks the product or the users now; high = important and soon; medium = normal; low = nice to have.
+
+      The task (title, blank line, description):
+      ${{ steps.read_task.outputs.stdout }}

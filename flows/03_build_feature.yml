@@ -11,7 +11,7 @@
 # FACTORY_DIR is hardcoded for the single test project (see .claude/plans/2026-11-14_factory-architecture.md).
 
 id: build_feature
-version: '0.2.0'
+version: '0.2.1'
 name: 'Build a feature'
 description: 'Sync a pool slot on integration, implement the task with a sandboxed model, run the gates, commit and push the task branch'
 
@@ -84,6 +84,7 @@ steps:
   - id: gates
     name: 'Install, build, test, violations, app-module check (VM)'
     type: script
+    shell: bash
     depends: [implement]
     secrets: [NPM_TOKEN]
     timeout: 600
