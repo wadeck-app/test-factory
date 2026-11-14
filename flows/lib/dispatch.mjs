@@ -11,7 +11,7 @@
 //   FACTORY_PROJECT         task/flow project name (default test-factory)
 import fs from 'node:fs';
 import path from 'node:path';
-import { assertPlainId, fail, parseJson, park, project, projectDirectory, run, runChecked, task } from './factory.mjs';
+import { assertPlainId, fail, parseJson, park, project, projectDirectory, recordActiveRun, run, runChecked, task } from './factory.mjs';
 
 const tokenFile = process.env.FACTORY_NPM_TOKEN_FILE ?? './_secrets_/npm-read-token';
 const usage = 'Usage: node flows/lib/dispatch.mjs [--dry-run] [--roles integrate,build,plan,triage]';
@@ -94,21 +94,26 @@ function startRun(role, claim) {
 			park(taskId, role.worker, `the description is too long for the ${role.name} analysis (${encoded.length} base64 characters, limit ${MAX_BASE64}). Shorten it, then put the task back to ${role.status}.`);
 			task(['release', taskId, '--as', role.worker]);
 			console.error(`dispatch: task ${taskId} is on hold: description too long for ${role.name}.`);
-			return false;
+			return 'skipped';
 		}
 		inputs.push('-i', `taskB64=${encoded}`);
 	}
 	if (role.npmToken) inputs.push('-i', `NPM_TOKEN=file://${tokenFile}`);
 	if (role.startStatus) task(['set-status', taskId, role.startStatus]);
-	const start = run('flow', ['run', role.file, ...inputs, '-p', project]);
+	const start = run('flow', ['run', role.file, ...inputs, '-p', project, '--json']);
 	if (start.status !== 0) {
 		// Give the task back: never leave a task claimed with nothing running for it.
 		if (role.startStatus) task(['set-status', taskId, role.status]);
 		task(['release', taskId, '--as', role.worker]);
-		fail(`flow run ${role.file} failed for task ${taskId}, the task was released${role.startStatus ? ` and put back in "${role.status}"` : ''}.\n${start.stdout}${start.stderr}`);
+			console.error(`dispatch: flow run ${role.file} failed for task ${taskId}, the task was released${role.startStatus ? ` and put back in "${role.status}"` : ''}. The other roles continue.
+${start.stdout}${start.stderr}`);
+			return 'failed';
 	}
-	console.log(`dispatch: started ${role.flow} for task ${taskId}`);
-	return true;
+	const started = parseJson(start.stdout, 'flow run --json');
+	if (typeof started.executionId !== 'string') fail(`flow run --json for task ${taskId} did not return an executionId: ${start.stdout.slice(0, 200)}`);
+	recordActiveRun(taskId, role.flow, started.executionId);
+	console.log(`dispatch: started ${role.flow} for task ${taskId} (execution ${started.executionId})`);
+	return 'started';
 }
 
 acquireLock();
@@ -118,6 +123,7 @@ const unknownRoles = (selectedRoles ?? []).filter((name) => !roles.some((role) =
 if (unknownRoles.length > 0) fail(`unknown role(s): ${unknownRoles.join(', ')}. Known: ${roles.map((role) => role.name).join(', ')}.`);
 
 let started = 0;
+let failedRoles = 0;
 for (const role of roles.filter((candidate) => selectedRoles === undefined || selectedRoles.includes(candidate.name))) {
 	let active = activeRuns(role.pool);
 	while (active < role.capacity) {
@@ -131,10 +137,16 @@ for (const role of roles.filter((candidate) => selectedRoles === undefined || se
 			task(['release', assertPlainId(claim.taskId, 'claimed task id'), '--as', role.worker]);
 			break;
 		}
-		if (startRun(role, claim)) {
+		const outcome = startRun(role, claim);
+		if (outcome === 'failed') {
+			failedRoles += 1;
+			break;
+		}
+		if (outcome === 'started') {
 			started += 1;
 			active += 1;
 		}
 	}
 }
-console.log(`dispatch: done, ${started} run(s) started.`);
+console.log(`dispatch: done, ${started} run(s) started${failedRoles > 0 ? `, ${failedRoles} role(s) could not start (see above)` : ''}.`);
+if (failedRoles > 0) process.exitCode = 1;

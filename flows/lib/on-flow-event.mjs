@@ -13,7 +13,7 @@
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { assertPlainId, comment, completeResponse, fail, parseJson, park, project, showExecution, task, taskIdOf } from './factory.mjs';
+import { assertPlainId, clearActiveRun, comment, completeResponse, fail, parseJson, park, project, showExecution, task, taskIdOf } from './factory.mjs';
 
 const TYPES = ['feature', 'enhancement', 'bug', 'question', 'audit'];
 const PRIORITIES = ['urgent', 'high', 'medium', 'low'];
@@ -74,8 +74,22 @@ if (!dryRun) {
 	});
 }
 const taskId = taskIdOf(record);
+clearActiveRun(taskId, executionId);
+
+// A human hold always wins: a run that finishes after the hold publishes its result but never moves the task.
+const held = currentStatus(taskId) === 'on-hold';
+function setStatus(status) {
+	if (held) console.log(`on-flow-event: task ${taskId} is on hold, status left on-hold (the run wanted ${status}).`);
+	else task(['set-status', taskId, status]);
+}
 
 if (record.status === 'failed') {
+	if (currentStatus(taskId) === 'on-hold') {
+		// A human put the task on hold and on-hold.mjs cancelled this run (or the run failed after the hold): nothing to park again.
+		release(taskId, worker);
+		console.log(`on-flow-event: ${flowId} ${executionId} stopped while task ${taskId} is on hold, claim released.`);
+		process.exit(0);
+	}
 	if (flowId === 'integrate' && currentStatus(taskId) === 'planned') {
 		// The flow itself refused a merge conflict: it commented the task and sent it back to planned.
 		release(taskId, worker);
@@ -116,7 +130,7 @@ if (flowId === 'triage') {
 		task(['set-type', taskId, verdict.type]);
 		task(['set-priority', taskId, verdict.priority]);
 		comment(taskId, worker, `Triage: type ${verdict.type}, priority ${verdict.priority}.\n\nSummary: ${verdict.summary}\n\nReason: ${verdict.reason}`);
-		task(['set-status', taskId, 'backlog']);
+		setStatus('backlog');
 	});
 	release(taskId, worker);
 	console.log(`on-flow-event: task ${taskId} triaged (${verdict.type}, ${verdict.priority}), now backlog.`);
@@ -139,14 +153,14 @@ if (flowId === 'triage') {
 	}
 	act(`task ${taskId}: plan comment, ${ready ? 'planned' : 'on-hold (human decision)'}`, () => {
 		comment(taskId, worker, text);
-		task(['set-status', taskId, ready ? 'planned' : 'on-hold']);
+		setStatus(ready ? 'planned' : 'on-hold');
 	});
 	release(taskId, worker);
 	console.log(`on-flow-event: task ${taskId} planned (${ready ? 'ready' : 'waiting for a human decision'}).`);
 } else if (flowId === 'build_feature') {
 	act(`task ${taskId}: integrating`, () => {
 		comment(taskId, worker, 'Built, gates passed, branch pushed. Handed to the integrator.');
-		task(['set-status', taskId, 'integrating']);
+		setStatus('integrating');
 	});
 	release(taskId, worker);
 	console.log(`on-flow-event: task ${taskId} built, now integrating.`);
