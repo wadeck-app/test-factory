@@ -5,7 +5,7 @@
 # profile: inspect = read-only clone, no `task` here (see 01_triage.yml). The goal arrives base64 encoded.
 
 id: pm
-version: '0.1.1'
+version: '0.1.2'
 name: 'Product manager'
 description: 'Read-only analyst: split a goal into independent, buildable tasks with their dependencies'
 
@@ -45,14 +45,14 @@ steps:
       - Order matters: when a task needs another one done first, list that other task's number in "blockedBy".
       - Do not repeat something the code already does.
       - 3 to 8 tasks. The title is plain text, at most 80 characters, no quotes, no special characters. The description is Markdown,
-        self-contained (a builder reads only this): what and why, the data involved, the routes or views expected, how to check it. At most 500 characters each.
+        self-contained (a builder reads only this): what and why, the data involved, the routes or views expected, how to check it. At most 300 characters each.
       - priority is one of urgent, high, medium, low. Foundations others depend on are higher than their dependents.
 
       Answer with ONE JSON object and nothing else (no text before or after, no code fence):
 
       {"tasks": [{"title": "...", "description": "...", "priority": "high", "blockedBy": []}, {"title": "...", "description": "...", "priority": "medium", "blockedBy": [1]}]}
 
-      Your whole answer MUST stay under 5000 characters: the execution record truncates longer answers and the flow then fails.
+      Your whole answer MUST stay under 3500 characters: the execution record keeps at most 4096 characters of an answer, a longer one is lost.
 
       "blockedBy" holds the 1-based numbers, in this same list, of the tasks that must be done first (empty when none).
 

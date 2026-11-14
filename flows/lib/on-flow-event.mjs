@@ -14,7 +14,7 @@ import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BUILD_FLOWS } from './kinds.mjs';
-import { assertPlainId, clearActiveRun, comment, completeResponse, fail, parseJson, park, project, showExecution, task, taskIdOf } from './factory.mjs';
+import { activeRunOf, assertPlainId, clearActiveRun, comment, completeResponse, fail, parseJson, park, project, showExecution, task, taskIdOf } from './factory.mjs';
 
 const TYPES = ['feature', 'enhancement', 'bug', 'question', 'audit'];
 const PRIORITIES = ['urgent', 'high', 'medium', 'low'];
@@ -77,6 +77,13 @@ if (!dryRun) {
 	});
 }
 const taskId = taskIdOf(record);
+// The queue delivers at least once and retries a failed handler later: an event of an older run must never act on a task that
+// already has a newer run (it would park the task and the hold would cancel the newer run).
+const recorded = activeRunOf(taskId);
+if (recorded !== undefined && recorded.executionId !== executionId) {
+	console.log(`on-flow-event: execution ${executionId} is not the current run of task ${taskId} (${recorded.executionId} is), stale event ignored.`);
+	process.exit(0);
+}
 clearActiveRun(taskId, executionId);
 
 // A human hold always wins: a run that finishes after the hold publishes its result but never moves the task.
@@ -107,8 +114,19 @@ if (record.status === 'failed') {
 	process.exit(0);
 }
 
+// An answer the record could not keep leaves the task on hold with a comment saying what to do: never a silent failure.
+function answerOf(stepId, what) {
+	try {
+		return completeResponse(record, stepId);
+	} catch (error) {
+		act(`park ${taskId}: ${error.message}`, () => park(taskId, worker, `${what} is lost: ${error.message} Put the task back to its previous status to run the analysis again.`));
+		release(taskId, worker);
+		return fail(`${error.message} The task ${taskId} is on hold.`);
+	}
+}
+
 if (flowId === 'triage') {
-	const text = completeResponse(record, 'classify');
+	const text = answerOf('classify', 'the triage answer');
 	let verdict;
 	try {
 		verdict = JSON.parse(text);
@@ -143,7 +161,7 @@ if (flowId === 'triage') {
 	release(taskId, worker);
 	console.log(`on-flow-event: task ${taskId} triaged (${verdict.type}, ${verdict.priority}), now ${PARKED_TYPES.includes(verdict.type) ? 'on hold (parked type)' : 'backlog'}.`);
 } else if (flowId === 'plan') {
-	const text = completeResponse(record, 'plan').trim();
+	const text = answerOf('plan', 'the plan').trim();
 	const lastLine = text.split('\n').filter((line) => line.trim() !== '').at(-1) ?? '';
 	const ready = /^READY: yes$/.test(lastLine) ? true : /^READY: no - .+/.test(lastLine) ? false : undefined;
 	const problem =

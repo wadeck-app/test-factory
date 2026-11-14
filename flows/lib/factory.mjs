@@ -56,12 +56,24 @@ export function taskIdOf(record) {
 	return fail(`execution ${record.executionId} records no TASK_ID and the dispatcher has no record of it: the flow ${record.flowId} must give a step the env TASK_ID: \${{ inputs.taskId }}.`);
 }
 
+// The execution record keeps at most 4096 characters of a model answer: a longer answer is marked truncated (or only kept as rawOutput).
+// Throws an Error: the caller decides what happens to the task.
 export function completeResponse(record, stepId) {
 	const answer = record.steps?.[stepId]?.io?.outputs?.response;
 	if (!answer || answer.truncated === true || typeof answer.text !== 'string') {
-		return fail(`step "${stepId}" of execution ${record.executionId} has no complete response in the execution record.`);
+		throw new Error(`step "${stepId}" of execution ${record.executionId} has no complete response in the execution record (the record keeps at most 4096 characters of an answer: a longer answer is lost).`);
 	}
 	return answer.text;
+}
+
+// The read-only analyst flows (triage, plan, PM) use the pool `<project folder>_ro` with ONE clone, named `<project folder>_ro1`.
+// They cannot update it themselves (profile inspect refuses host steps): call this before starting one. Throws an Error with the cause.
+export function syncReaderClone() {
+	const clone = path.join(path.dirname(projectDirectory), `${path.basename(projectDirectory)}_ro1`);
+	if (!fs.existsSync(path.join(clone, '.git'))) throw new Error(`the reader clone ${clone} does not exist (or is not a dedicated clone). It is created by the first analyst run: run \`flow run flows/01_triage.yml\` once, or clone the repository there.`);
+	const result = run('bash', [path.join(projectDirectory, 'flows', 'lib', 'sync-reader.sh').replaceAll('\\', '/')], undefined, clone);
+	if (result.status !== 0) throw new Error(`cannot put the reader clone ${clone} on origin/integration (exit ${result.status}). ${result.stderr}${result.stdout}`);
+	return result.stdout.trim();
 }
 
 export function task(args, input) {

@@ -5,7 +5,7 @@
 # on the task and moves it to `planned` (or `on-hold` when the analyst needs a human decision).
 
 id: plan
-version: '0.1.1'
+version: '0.1.2'
 name: 'Plan a task'
 description: 'Read-only analyst: acceptance criteria, files to change and risks of a triaged task'
 
@@ -61,7 +61,7 @@ steps:
       READY: yes
       READY: no - <the question a human must answer>
 
-      Your whole answer MUST stay under 6000 characters: the execution record truncates longer answers and the flow then fails.
+      Your whole answer MUST stay under 3500 characters: the execution record keeps at most 4096 characters of an answer, a longer one is lost.
 
       Use "READY: no" only when the task cannot be built without a decision you cannot make from the task and the code.
 
