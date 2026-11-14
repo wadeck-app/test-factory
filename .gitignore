@@ -15,3 +15,5 @@ _secrets_/
 # Claude Code session files (plans in .claude/plans stay versioned)
 .claude/w-guardrails/
 .claude/logs/
+# Flow run artifacts (outputs of every run, never versioned)
+.flow/
