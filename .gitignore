@@ -1,0 +1,17 @@
+node_modules/
+.idea/
+dist/
+dist-module/
+dist-types/
+*.tsbuildinfo
+*.log
+# Local dev server data of app-core-cli dev
+.app-core-dev/
+# Protected directory for secrets (.env.local, credentials, tokens)
+_secrets_/
+.env*
+# Git Bash (MSYS2) crash dumps
+*.stackdump
+# Claude Code session files (plans in .claude/plans stay versioned)
+.claude/w-guardrails/
+.claude/logs/

@@ -1,0 +1,5 @@
+$sources:
+  ping:
+    url: GET /api/modules/school/ping
+$type: Badge
+label: $sources.ping.message

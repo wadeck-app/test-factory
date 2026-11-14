@@ -1,0 +1,26 @@
+{
+  "name": "@wadeck-app/test-factory",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace=packages/app-module-school",
+    "test": "npm run test --workspace=packages/app-module-school",
+    "check": "npm run check --workspace=packages/app-module-school",
+    "bundle": "npm run bundle --workspace=packages/app-module-school",
+    "clean": "npm run clean --workspace=packages/app-module-school"
+  },
+  "devDependencies": {
+    "@wadeck-app/app-core-cli": "latest",
+    "@wadeck-app/app-core-sdk": "latest",
+    "@wadeck-app/violations-rules": "latest",
+    "typescript": "^7.0.0",
+    "vitest": "^4.0.14"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

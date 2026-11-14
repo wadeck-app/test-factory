@@ -1,0 +1,23 @@
+{
+  "name": "@wadeck-app/app-module-school",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist-module"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit",
+    "check": "app-core-cli check .",
+    "bundle": "app-core-cli package .",
+    "test": "vitest run --passWithNoTests",
+    "clean": "rimraf dist-module"
+  },
+  "devDependencies": {
+    "@wadeck-app/app-core-cli": "latest",
+    "@wadeck-app/app-core-sdk": "latest",
+    "rimraf": "^6.0.1",
+    "typescript": "^7.0.0",
+    "vitest": "^4.0.14"
+  }
+}
