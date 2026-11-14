@@ -1,0 +1,60 @@
+# Product manager analyst (read-only): turns a goal into a list of tasks. Run through flows/lib/pm.mjs, which validates the answer
+# and creates the tasks with the task CLI:
+#   npm run pm -- "Goal in one or two paragraphs"        (or: npm run pm -- --file goal.txt)
+#
+# profile: inspect = read-only clone, no `task` here (see 01_triage.yml). The goal arrives base64 encoded.
+
+id: pm
+version: '0.1.1'
+name: 'Product manager'
+description: 'Read-only analyst: split a goal into independent, buildable tasks with their dependencies'
+
+profile: inspect
+
+workspace: { provider: pool, dir: C:/Workspace_Tooling, prefix: _test-factory_ro, count: 1 }
+
+inputs:
+  goalB64: text
+
+steps:
+  - id: read_goal
+    name: 'Decode the goal'
+    type: script
+    shell: bash
+    captureOutput: stdout
+    env:
+      GOAL_B64: ${{ inputs.goalB64 }}
+    script: |
+      set -euo pipefail
+      printf '%s' "$GOAL_B64" | base64 -d
+
+  - id: split
+    name: 'Split the goal into tasks'
+    type: model
+    model: sonnet
+    depends: [read_goal]
+    tools: [read, glob, grep]
+    skipPermissions: true
+    prompt: |
+      You are the product manager of a software factory. Your working directory is a read-only clone of the product repository
+      (a TypeScript monorepo; the product is the app-core app-module in packages/app-module-school: backend in src/backend/index.ts,
+      views are YAML in src/dsl-views). Read the code to see what already exists, then split the goal below into tasks.
+
+      Rules for the tasks:
+      - Each task is buildable by one developer in one sitting (small vertical slice: data, API, and its view), testable on its own.
+      - Order matters: when a task needs another one done first, list that other task's number in "blockedBy".
+      - Do not repeat something the code already does.
+      - 3 to 8 tasks. The title is plain text, at most 80 characters, no quotes, no special characters. The description is Markdown,
+        self-contained (a builder reads only this): what and why, the data involved, the routes or views expected, how to check it. At most 500 characters each.
+      - priority is one of urgent, high, medium, low. Foundations others depend on are higher than their dependents.
+
+      Answer with ONE JSON object and nothing else (no text before or after, no code fence):
+
+      {"tasks": [{"title": "...", "description": "...", "priority": "high", "blockedBy": []}, {"title": "...", "description": "...", "priority": "medium", "blockedBy": [1]}]}
+
+      Your whole answer MUST stay under 5000 characters: the execution record truncates longer answers and the flow then fails.
+
+      "blockedBy" holds the 1-based numbers, in this same list, of the tasks that must be done first (empty when none).
+
+      The goal:
+      ${{ steps.read_goal.outputs.stdout }}
