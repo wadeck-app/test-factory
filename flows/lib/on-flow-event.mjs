@@ -14,7 +14,7 @@ import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BUILD_FLOWS } from './kinds.mjs';
-import { assertPlainId, clearActiveRun, comment, completeResponse, fail, parseJson, park, project, showExecution, task, taskIdOf } from './factory.mjs';
+import { activeRunOf, assertPlainId, clearActiveRun, comment, completeResponse, fail, parseJson, park, project, showExecution, task, taskIdOf } from './factory.mjs';
 
 const TYPES = ['feature', 'enhancement', 'bug', 'question', 'audit'];
 const PRIORITIES = ['urgent', 'high', 'medium', 'low'];
@@ -77,6 +77,13 @@ if (!dryRun) {
 	});
 }
 const taskId = taskIdOf(record);
+// The queue delivers at least once and retries a failed handler later: an event of an older run must never act on a task that
+// already has a newer run (it would park the task and the hold would cancel the newer run).
+const recorded = activeRunOf(taskId);
+if (recorded !== undefined && recorded.executionId !== executionId) {
+	console.log(`on-flow-event: execution ${executionId} is not the current run of task ${taskId} (${recorded.executionId} is), stale event ignored.`);
+	process.exit(0);
+}
 clearActiveRun(taskId, executionId);
 
 // A human hold always wins: a run that finishes after the hold publishes its result but never moves the task.
