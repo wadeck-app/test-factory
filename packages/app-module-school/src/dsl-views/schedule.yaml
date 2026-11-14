@@ -17,6 +17,13 @@ $actions:
     url: POST /api/modules/school/schedule
     reloadSources: [grid, entries]
     successMessage: Entry added
+  updateEntry:
+    url: PUT /api/modules/school/schedule/{id}
+    reloadSources: [grid, entries]
+    resultKey: editing
+    successMessage: Entry saved
+  editEntry:
+    resultKey: editing
   deleteEntry:
     url: DELETE /api/modules/school/schedule/{id}
     reloadSources: [grid, entries]
@@ -43,7 +50,19 @@ items:
       - { field: label, label: Entry }
       - type: actions
         items:
+          - { label: Edit, action: editEntry }
           - { label: Delete, action: deleteEntry, variant: danger }
+  - $type: Form
+    $if: $editing
+    initialData: $editing
+    onSubmit: $ctx.updateEntry
+    fields:
+      - { $type: FieldSelect, bind: courseId, label: Course, options: $sources.courseOptions, placeholder: Select a course, required: true }
+      - { $type: FieldSelect, bind: classroomId, label: Classroom, options: $sources.classroomOptions, placeholder: Select a classroom, required: true }
+      - { $type: FieldSelect, bind: day, label: Day, options: $sources.dayOptions, placeholder: Select a day, required: true }
+      - { $type: FieldSelect, bind: slot, label: Slot, options: $sources.slotOptions, placeholder: Select a slot, required: true }
+    actions:
+      - { $type: ButtonSave, label: Save }
   - $type: Form
     onSubmit: $ctx.createEntry
     fields:

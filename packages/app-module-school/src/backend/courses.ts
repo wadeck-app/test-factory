@@ -1,5 +1,5 @@
 import type { ModuleContext } from '@wadeck-app/app-core-sdk';
-import { countScheduleEntriesForCourse, usedByEntriesMessage } from './schedule';
+import { countScheduleEntriesForCourse, findCourseConflict, usedByEntriesMessage } from './schedule';
 import type { CollectionStore, Store } from './store';
 
 export interface Course {
@@ -112,6 +112,14 @@ export function registerCourseRoutes(ctx: ModuleContext, store: Store): void {
     const refusal = checkReferences(store, result.value);
     if (refusal) {
       return reply.code(refusal.status).send({ message: refusal.message });
+    }
+    const conflict = findCourseConflict(store, {
+      id: req.params.id,
+      teacherId: result.value.teacherId,
+      studentClassId: result.value.studentClassId,
+    });
+    if (conflict) {
+      return reply.code(409).send({ message: conflict });
     }
     return reply.send(courses().update(req.params.id, result.value));
   });

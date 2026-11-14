@@ -11,6 +11,13 @@ $actions:
     url: POST /api/modules/school/courses
     reloadSources: [courses]
     successMessage: Course created
+  updateCourse:
+    url: PUT /api/modules/school/courses/{id}
+    reloadSources: [courses]
+    resultKey: editing
+    successMessage: Course saved
+  editCourse:
+    resultKey: editing
   deleteCourse:
     url: DELETE /api/modules/school/courses/{id}
     reloadSources: [courses]
@@ -29,7 +36,18 @@ items:
       - { field: studentClassName, label: Class }
       - type: actions
         items:
+          - { label: Edit, action: editCourse }
           - { label: Delete, action: deleteCourse, variant: danger }
+  - $type: Form
+    $if: $editing
+    initialData: $editing
+    onSubmit: $ctx.updateCourse
+    fields:
+      - { $type: FieldText, bind: subject, label: Subject, required: true }
+      - { $type: FieldSelect, bind: teacherId, label: Teacher, options: $sources.teacherOptions, placeholder: Select a teacher, required: true }
+      - { $type: FieldSelect, bind: studentClassId, label: Class, options: $sources.classOptions, placeholder: Select a class, required: true }
+    actions:
+      - { $type: ButtonSave, label: Save }
   - $type: Form
     onSubmit: $ctx.createCourse
     fields:
