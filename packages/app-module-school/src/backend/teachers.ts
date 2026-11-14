@@ -1,5 +1,5 @@
 import type { ModuleContext } from '@wadeck-app/app-core-sdk';
-import { isTeacherUsed } from './courses';
+import { findCourseWithRemovedSubject, isTeacherUsed } from './courses';
 import type { CollectionStore, Store } from './store';
 
 export interface Teacher {
@@ -53,11 +53,14 @@ export function registerTeacherRoutes(ctx: ModuleContext, store: Store): void {
     if (!result.ok) {
       return reply.code(400).send({ message: result.message });
     }
-    const updated = teachers().update(req.params.id, result.value);
-    if (!updated) {
+    if (!teachers().get(req.params.id)) {
       return reply.code(404).send({ message: 'teacher not found' });
     }
-    return reply.send(updated);
+    const conflict = findCourseWithRemovedSubject(store, req.params.id, result.value.subjects);
+    if (conflict) {
+      return reply.code(409).send({ message: conflict });
+    }
+    return reply.send(teachers().update(req.params.id, result.value));
   });
 
   ctx.registerRoute('DELETE', '/teachers/:id', (req, reply) => {

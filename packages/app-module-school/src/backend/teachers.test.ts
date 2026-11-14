@@ -21,12 +21,12 @@ class FakeReply {
   }
 }
 
-function setup(dir: string) {
+function setup(dir: string, store = createStore(dir)) {
   const routes = new Map<string, Handler>();
   const ctx = {
     registerRoute: (method: string, path: string, handler: Handler) => routes.set(`${method} ${path}`, handler),
   } as unknown as ModuleContext;
-  registerTeacherRoutes(ctx, createStore(dir));
+  registerTeacherRoutes(ctx, store);
   return (route: string, body?: unknown, id?: string) => {
     const reply = new FakeReply();
     routes.get(route)!({ body, params: id ? { id } : {} }, reply);
@@ -105,6 +105,46 @@ describe('teacher routes', () => {
     const call = setup(dir);
     expect(call('PUT /teachers/:id', { name: 'Bob', subjects: ['Art'] }, 'nope').status).toBe(404);
     expect(call('DELETE /teachers/:id', undefined, 'nope').status).toBe(404);
+  });
+
+  describe('editing subjects used by a course', () => {
+    function withCourse() {
+      const store = createStore(dir);
+      const call = setup(dir, store);
+      const { id } = call('POST /teachers', { name: 'Ada', subjects: ['Mathematics', 'Physics'] }).payload as {
+        id: string;
+      };
+      const klass = store.collection('classes').create({ name: '6A' });
+      const course = store.collection('courses').create({
+        subject: 'Mathematics',
+        teacherId: id,
+        studentClassId: klass.id,
+      });
+      return { call, id, courseId: course.id };
+    }
+
+    it('answers 409 naming the course and leaves the teacher unchanged', () => {
+      const { call, id, courseId } = withCourse();
+      const reply = call('PUT /teachers/:id', { name: 'Ada', subjects: 'Physics' }, id);
+      expect(reply.status).toBe(409);
+      const message = (reply.payload as { message: string }).message;
+      expect(message).toContain('Mathematics');
+      expect(message).toContain('6A');
+      expect(message).toContain(courseId);
+      expect(call('GET /teachers').payload).toEqual([{ id, name: 'Ada', subjects: ['Mathematics', 'Physics'] }]);
+    });
+
+    it('answers 200 when the course subject is kept, or when no course uses the removed subject', () => {
+      const { call, id } = withCourse();
+      expect(call('PUT /teachers/:id', { name: 'Ada L.', subjects: 'Mathematics, Art' }, id).status).toBe(200);
+      expect(call('PUT /teachers/:id', { name: 'Ada L.', subjects: ['Mathematics'] }, id).status).toBe(200);
+    });
+
+    it('answers 400 and 404 before 409', () => {
+      const { call, id } = withCourse();
+      expect(call('PUT /teachers/:id', { name: 'Ada', subjects: [] }, id).status).toBe(400);
+      expect(call('PUT /teachers/:id', { name: 'Ada', subjects: ['Art'] }, 'nope').status).toBe(404);
+    });
   });
 
   it('keeps teachers after a restart', () => {
