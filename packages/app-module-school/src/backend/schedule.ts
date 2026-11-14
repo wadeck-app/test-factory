@@ -4,6 +4,12 @@ import type { CollectionStore, Store } from './store';
 export const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri'] as const;
 export type Day = (typeof DAYS)[number];
 
+export const SLOTS = ['08:00-09:00', '09:00-10:00', '10:00-11:00', '11:00-12:00'];
+
+const DAY_LABELS: Record<Day, string> = { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri' };
+export const DAY_OPTIONS = DAYS.map((d) => ({ value: d, label: DAY_LABELS[d] }));
+export const SLOT_OPTIONS = SLOTS.map((s) => ({ value: s, label: s }));
+
 export interface ScheduleEntry {
   id: string;
   courseId: string;
@@ -125,6 +131,70 @@ export function registerScheduleRoutes(ctx: ModuleContext, store: Store): void {
   };
 
   ctx.registerRoute('GET', '/schedule', (_req, reply) => reply.send(slots().list()));
+
+  // Description of an entry: subject, teacher, class and classroom.
+  const describe = (e: ScheduleEntry) => {
+    const course = store.collection('courses').get(e.courseId) as unknown as
+      | (CourseRef & { subject: string })
+      | undefined;
+    const teacher = course && (store.collection('teachers').get(course.teacherId) as unknown as { name: string } | undefined);
+    const klass = course && lookups.studentClass(course.studentClassId);
+    return {
+      subject: course?.subject ?? '?',
+      teacher: teacher?.name ?? '?',
+      studentClass: klass?.name ?? '?',
+      classroom: lookups.classroom(e.classroomId)?.name ?? '?',
+    };
+  };
+  const summary = (e: ScheduleEntry): string => {
+    const d = describe(e);
+    return `${d.subject} / ${d.teacher} / ${d.studentClass} / ${d.classroom}`;
+  };
+
+  // The week as a table: one row per slot (the fixed ones, then any other stored slot), one key per day.
+  ctx.registerRoute('GET', '/schedule-grid', (_req, reply) => {
+    const entries = slots().list() as unknown as ScheduleEntry[];
+    const labels = [...new Set([...SLOTS, ...entries.map((e) => e.slot)])].sort();
+    return reply.send(
+      labels.map((slot) => {
+        const row: Record<string, string> = { slot };
+        for (const day of DAYS) {
+          row[day] = entries
+            .filter((e) => e.day === day && e.slot === slot)
+            .map(summary)
+            .join('; ');
+        }
+        return row;
+      }),
+    );
+  });
+
+  // Flat list of entries, with a label, to delete them.
+  ctx.registerRoute('GET', '/schedule-entries', (_req, reply) =>
+    reply.send(
+      (slots().list() as unknown as ScheduleEntry[]).map((e) => ({
+        ...e,
+        label: `${DAY_LABELS[e.day]} ${e.slot} - ${summary(e)}`,
+      })),
+    ),
+  );
+
+  // `{ value, label }` lists for the selects of the form.
+  ctx.registerRoute('GET', '/course-options', (_req, reply) =>
+    reply.send(
+      (store.collection('courses').list() as unknown as (CourseRef & { subject: string })[]).map((c) => ({
+        value: c.id,
+        label: `${c.subject} - ${lookups.studentClass(c.studentClassId)?.name ?? '?'}`,
+      })),
+    ),
+  );
+  ctx.registerRoute('GET', '/classroom-options', (_req, reply) =>
+    reply.send(
+      (store.collection('classrooms').list() as unknown as ClassroomRef[]).map((c) => ({ value: c.id, label: c.name })),
+    ),
+  );
+  ctx.registerRoute('GET', '/day-options', (_req, reply) => reply.send(DAY_OPTIONS));
+  ctx.registerRoute('GET', '/slot-options', (_req, reply) => reply.send(SLOT_OPTIONS));
 
   ctx.registerRoute('POST', '/schedule', (req, reply) => {
     const result = validateSchedule(req.body);

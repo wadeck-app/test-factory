@@ -37,6 +37,15 @@
         "type": "path",
         "value": "./src/dsl-views/courses.yaml"
       }
+    },
+    {
+      "kind": "page",
+      "slot": "nav",
+      "label": "Schedule",
+      "view": {
+        "type": "path",
+        "value": "./src/dsl-views/schedule.yaml"
+      }
     }
   ]
 }
