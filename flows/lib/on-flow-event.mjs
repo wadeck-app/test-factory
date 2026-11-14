@@ -115,6 +115,20 @@ if (record.status === 'failed') {
 		console.log(`on-flow-event: integration of ${taskId} refused (conflict), task is planned again.`);
 		process.exit(0);
 	}
+	// The sandbox worker serves one run at a time and refuses a second run at its first VM step. That is not a problem of the task: the
+	// task goes back to the status it started from and the dispatcher starts it again when a sandbox is free. Said loudly in a comment.
+	// The error text is on the failed step (the execution record has no error of its own).
+	if (Object.values(record.steps ?? {}).some((step) => /This worker already serves run/.test(String(step?.error ?? '')))) {
+		const START_STATUS = { triage: 'new', plan: 'backlog', integrate: 'integrating' };
+		const startStatus = flowId.startsWith('build_') ? 'planned' : START_STATUS[flowId];
+		act(`task ${taskId}: sandbox busy, back to ${startStatus}`, () => {
+			comment(taskId, worker, `The ${flowId} run ${executionId} could not start: the sandbox was busy with another run. The task goes back to "${startStatus}" and starts again by itself when a sandbox is free.`);
+			setStatus(startStatus);
+		});
+		release(taskId, worker);
+		console.error(`on-flow-event: ${flowId} ${executionId} refused by a busy sandbox, task ${taskId} back to ${startStatus} and retried by the dispatcher. The dispatcher should have prevented this run: check who started it.`);
+		process.exit(0);
+	}
 	if (flowId === 'integrate' && currentStatus(taskId) === 'integrated') {
 		// The merge is on integration: a later step failed (CI of the pushed commit, packaging, deployment). The task stays integrated
 		// (its code is there), but the humans are told loudly and the failing step is named in the run.
