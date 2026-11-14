@@ -1,0 +1,67 @@
+# Planning flow (read-only analyst): write the plan of a triaged task. Manual run:
+#   flow run flows/02_plan.yml -i taskId=<id> -i taskB64=<base64 of "title\n\ndescription">
+#
+# Same shape as 01_triage (see its header): the plan is the response of step `plan`; flows/lib/publish-plan.mjs (host) posts it
+# on the task and moves it to `planned` (or `on-hold` when the analyst needs a human decision).
+
+id: plan
+version: '0.1.0'
+name: 'Plan a task'
+description: 'Read-only analyst: acceptance criteria, files to change and risks of a triaged task'
+
+profile: inspect
+
+workspace: { provider: pool, dir: C:/Workspace_Tooling, prefix: _test-factory_ro, count: 1 }
+
+inputs:
+  taskId: text
+  taskB64: text
+
+steps:
+  - id: read_task
+    name: 'Decode the task text'
+    type: script
+    shell: bash
+    captureOutput: stdout
+    env:
+      TASK_B64: ${{ inputs.taskB64 }}
+      # Not used by the script: it records the task id in the execution so the publisher can find the task.
+      TASK_ID: ${{ inputs.taskId }}
+    script: |
+      set -euo pipefail
+      printf '%s' "$TASK_B64" | base64 -d
+
+  - id: plan
+    name: 'Write the plan'
+    type: model
+    model: sonnet
+    depends: [read_task]
+    tools: [read, glob, grep]
+    skipPermissions: true
+    prompt: |
+      You are the planning analyst of a software factory. Your working directory is a read-only clone of the product repository
+      (a TypeScript monorepo; the product is the app-core app-module in packages/app-module-school: backend in src/backend/index.ts,
+      views are YAML in src/dsl-views). Read the task below, then read the code you need, and write the plan a builder will follow.
+
+      Answer in Markdown with exactly these sections, in English, concise:
+
+      ## Goal
+      One or two sentences.
+
+      ## Acceptance criteria
+      A numbered list. Each criterion is checkable by running the app or a test.
+
+      ## Files to change
+      A list of paths, with a few words each. Say which files are new.
+
+      ## Risks and open questions
+      A list. Empty is written "None".
+
+      The very last line of your answer is exactly one of:
+      READY: yes
+      READY: no - <the question a human must answer>
+
+      Use "READY: no" only when the task cannot be built without a decision you cannot make from the task and the code.
+
+      The task (title, blank line, description):
+      ${{ steps.read_task.outputs.stdout }}

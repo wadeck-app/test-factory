@@ -1,57 +1,42 @@
-// Factory dispatcher: claims the next planned task with `task next` and starts the build flow, while a builder slot is free.
-// Deterministic, no LLM. Meant to be called by a queue subscriber (event = "look at the backlog") and at startup; safe to call often.
+// Factory dispatcher: for each role (integrator, builder, planner, triage), while capacity is free, claims the next task of the
+// role's status with `task next` and starts the role's flow. Deterministic, no LLM. Called by queue subscribers (an event only means
+// "look at the backlog") and at startup; safe to call often and in parallel (lock below).
 //
 //   node flows/lib/dispatch.mjs [--dry-run]
 //
 // Environment (all optional):
-//   FACTORY_BUILDERS     max build runs running or queued at once (default 1)
-//   FACTORY_PROJECT      task/flow project name (default test-factory)
-//   FACTORY_STATUS       status the builders take tasks from (default planned)
-//   FACTORY_NPM_TOKEN_FILE  path of the npm token file, relative to the project folder (default ./_secrets_/npm-read-token)
-//
-// The lock makes concurrent invocations (queue may run a cli subscriber twice at once) take turns.
-import { spawnSync } from 'node:child_process';
+//   FACTORY_BUILDERS        max build_feature runs running or queued at once (default 1)
+//   FACTORY_ANALYSTS        max triage+plan runs running or queued at once (default 1: one read-only clone)
+//   FACTORY_NPM_TOKEN_FILE  npm token file, relative to the project folder (default ./_secrets_/npm-read-token)
+//   FACTORY_PROJECT         task/flow project name (default test-factory)
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { assertPlainId, fail, parseJson, park, project, projectDirectory, run, runChecked, task } from './factory.mjs';
 
-const projectDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-const project = process.env.FACTORY_PROJECT ?? 'test-factory';
-const status = process.env.FACTORY_STATUS ?? 'planned';
 const tokenFile = process.env.FACTORY_NPM_TOKEN_FILE ?? './_secrets_/npm-read-token';
+const usage = 'Usage: node flows/lib/dispatch.mjs [--dry-run] [--roles integrate,build,plan,triage]';
 const dryRun = process.argv.includes('--dry-run');
-const unknownArguments = process.argv.slice(2).filter((argument) => argument !== '--dry-run');
-if (unknownArguments.length > 0) fail(`unknown argument(s): ${unknownArguments.join(' ')}. Usage: node flows/lib/dispatch.mjs [--dry-run]`);
+const rolesFlag = process.argv.indexOf('--roles');
+const selectedRoles = rolesFlag === -1 ? undefined : (process.argv[rolesFlag + 1] ?? '').split(',').filter((name) => name !== '');
+const unknownArguments = process.argv.slice(2).filter((argument, index, all) => argument !== '--dry-run' && argument !== '--roles' && all[index - 1] !== '--roles');
+if (unknownArguments.length > 0) fail(`unknown argument(s): ${unknownArguments.join(' ')}. ${usage}`);
+if (rolesFlag !== -1 && (selectedRoles.length === 0)) fail(`--roles needs a comma separated list. ${usage}`);
 
-const builders = Number(process.env.FACTORY_BUILDERS ?? '1');
-if (!Number.isInteger(builders) || builders < 1) fail(`FACTORY_BUILDERS must be an integer >= 1, found "${process.env.FACTORY_BUILDERS}"`);
-
-function fail(message) {
-	console.error(`dispatch: ${message}`);
-	process.exit(1);
+function capacityOf(variable, fallback) {
+	const value = Number(process.env[variable] ?? String(fallback));
+	if (!Number.isInteger(value) || value < 1) fail(`${variable} must be an integer >= 1, found "${process.env[variable]}"`);
+	return value;
 }
+const builders = capacityOf('FACTORY_BUILDERS', 1);
+const analysts = capacityOf('FACTORY_ANALYSTS', 1);
 
-function run(command, args) {
-	const result = spawnSync(command, args, { cwd: projectDirectory, encoding: 'utf8', shell: process.platform === 'win32' });
-	if (result.error) fail(`cannot run "${command}": ${result.error.message}. Is it on the PATH of this process?`);
-	return result;
-}
-
-function runChecked(command, args) {
-	const result = run(command, args);
-	if (result.status !== 0) {
-		fail(`"${command} ${args.join(' ')}" exited with ${result.status}.\n${result.stdout}${result.stderr}`);
-	}
-	return result.stdout;
-}
-
-function parseJson(text, what) {
-	try {
-		return JSON.parse(text);
-	} catch (error) {
-		return fail(`${what} did not print JSON (${error.message}). It printed: ${text.slice(0, 300)}`);
-	}
-}
+// Order matters: integrating a branch frees work, so it comes first. `pool` = the flows that compete for the same clones.
+const roles = [
+	{ name: 'integrate', worker: 'factory-integrator', status: 'integrating', flow: 'integrate', file: 'flows/04_integrate.yml', pool: ['integrate'], capacity: 1, lease: '1h', npmToken: true },
+	{ name: 'build', worker: 'factory-builder', status: 'planned', flow: 'build_feature', file: 'flows/03_build_feature.yml', pool: ['build_feature'], capacity: builders, lease: '2h', npmToken: true, startStatus: 'in-progress' },
+	{ name: 'plan', worker: 'factory-planner', status: 'backlog', flow: 'plan', file: 'flows/02_plan.yml', pool: ['triage', 'plan'], capacity: analysts, lease: '30m', text: true },
+	{ name: 'triage', worker: 'factory-triage', status: 'new', flow: 'triage', file: 'flows/01_triage.yml', pool: ['triage', 'plan'], capacity: analysts, lease: '30m', text: true },
+];
 
 // One dispatcher at a time: an atomic mkdir is the lock, a dead pid makes it stale.
 const lockDirectory = path.join(projectDirectory, '.flow', 'dispatcher.lock');
@@ -83,51 +68,73 @@ function acquireLock() {
 	fs.writeFileSync(path.join(lockDirectory, 'pid'), String(process.pid));
 }
 
-function releaseLock() {
-	fs.rmSync(lockDirectory, { recursive: true, force: true });
-}
-
-function activeBuilds() {
+function activeRuns(flows) {
 	let count = 0;
-	for (const state of ['running', 'queued']) {
-		const executions = parseJson(runChecked('flow', ['history', '--json', '--status', state, '--flow', 'build_feature', '-p', project, '--limit', '50']), `flow history --status ${state}`);
-		count += Array.isArray(executions) ? executions.length : (executions.executions?.length ?? 0);
+	for (const flow of flows) {
+		for (const state of ['running', 'queued']) {
+			const executions = parseJson(runChecked('flow', ['history', '--json', '--status', state, '--flow', flow, '-p', project, '--limit', '50']), `flow history --status ${state} --flow ${flow}`);
+			count += Array.isArray(executions) ? executions.length : (executions.executions?.length ?? 0);
+		}
 	}
 	return count;
 }
 
-acquireLock();
-process.on('exit', releaseLock);
+// Free text reaches the flow only as base64 (the flow CLI takes key=value through a Windows cmd shim). The command line is
+// limited to 8191 characters, so a longer description cannot be analysed this way.
+const MAX_BASE64 = 5000;
 
-let active = activeBuilds();
-let started = 0;
-while (active < builders) {
-	const output = runChecked('task', ['next', '--as', 'factory-builder', '--status', status, '--lease', '2h', '--fresh', '--json', '-p', project]);
-	const claim = parseJson(output, 'task next');
-	if (claim.task === null) {
-		const detail = claim.lost ? ` (${claim.lost} candidate(s) lost to another worker)` : '';
-		console.log(`dispatch: no available task in "${status}"${detail}; ${active} build(s) active.`);
-		break;
+function startRun(role, claim) {
+	const taskId = assertPlainId(claim.taskId, 'claimed task id');
+	const inputs = ['-i', `taskId=${taskId}`];
+	if (role.text) {
+		const title = claim.task?.title ?? '';
+		const description = claim.task?.description ?? '';
+		const encoded = Buffer.from(description === '' || description === title ? title : `${title}\n\n${description}`, 'utf8').toString('base64');
+		if (encoded.length > MAX_BASE64) {
+			park(taskId, role.worker, `the description is too long for the ${role.name} analysis (${encoded.length} base64 characters, limit ${MAX_BASE64}). Shorten it, then put the task back to ${role.status}.`);
+			task(['release', taskId, '--as', role.worker]);
+			console.error(`dispatch: task ${taskId} is on hold: description too long for ${role.name}.`);
+			return false;
+		}
+		inputs.push('-i', `taskB64=${encoded}`);
 	}
-	const taskId = claim.taskId;
-	if (typeof taskId !== 'string') fail(`task next claimed something without a taskId: ${output.slice(0, 300)}`);
-	// The id ends up in a command line run through a shell (task and flow are .cmd shims on Windows): accept only plain ids.
-	if (!/^[A-Za-z0-9_-]+$/.test(taskId)) fail(`refusing task id "${taskId}": only letters, digits, "_" and "-" are accepted.`);
-	if (dryRun) {
-		console.log(`dispatch: DRY RUN, would start build_feature for task ${taskId} (claimed as ${claim.assignee}, lease until ${claim.leaseUntil}). The claim is released now.`);
-		runChecked('task', ['release', taskId, '--as', 'factory-builder', '-p', project]);
-		break;
-	}
-	runChecked('task', ['set-status', taskId, 'in-progress', '-p', project]);
-	const start = run('flow', ['run', 'flows/03_build_feature.yml', '-i', `taskId=${taskId}`, '-i', `NPM_TOKEN=file://${tokenFile}`, '-p', project]);
+	if (role.npmToken) inputs.push('-i', `NPM_TOKEN=file://${tokenFile}`);
+	if (role.startStatus) task(['set-status', taskId, role.startStatus]);
+	const start = run('flow', ['run', role.file, ...inputs, '-p', project]);
 	if (start.status !== 0) {
 		// Give the task back: never leave a task claimed with nothing running for it.
-		runChecked('task', ['set-status', taskId, status, '-p', project]);
-		runChecked('task', ['release', taskId, '--as', 'factory-builder', '-p', project]);
-		fail(`flow run failed for task ${taskId}, the task was released and put back in "${status}".\n${start.stdout}${start.stderr}`);
+		if (role.startStatus) task(['set-status', taskId, role.status]);
+		task(['release', taskId, '--as', role.worker]);
+		fail(`flow run ${role.file} failed for task ${taskId}, the task was released${role.startStatus ? ` and put back in "${role.status}"` : ''}.\n${start.stdout}${start.stderr}`);
 	}
-	console.log(`dispatch: started build_feature for task ${taskId}`);
-	started += 1;
-	active += 1;
+	console.log(`dispatch: started ${role.flow} for task ${taskId}`);
+	return true;
 }
-console.log(`dispatch: done, ${started} build(s) started.`);
+
+acquireLock();
+process.on('exit', () => fs.rmSync(lockDirectory, { recursive: true, force: true }));
+
+const unknownRoles = (selectedRoles ?? []).filter((name) => !roles.some((role) => role.name === name));
+if (unknownRoles.length > 0) fail(`unknown role(s): ${unknownRoles.join(', ')}. Known: ${roles.map((role) => role.name).join(', ')}.`);
+
+let started = 0;
+for (const role of roles.filter((candidate) => selectedRoles === undefined || selectedRoles.includes(candidate.name))) {
+	let active = activeRuns(role.pool);
+	while (active < role.capacity) {
+		const claim = parseJson(runChecked('task', ['next', '--as', role.worker, '--status', role.status, '--lease', role.lease, '--fresh', '--json', '-p', project]), `task next (${role.name})`);
+		if (claim.task === null) {
+			if (claim.lost) console.log(`dispatch: ${role.name}: ${claim.lost} candidate(s) lost to another worker, the next event retries.`);
+			break;
+		}
+		if (dryRun) {
+			console.log(`dispatch: DRY RUN, ${role.name}: would start ${role.flow} for task ${claim.taskId} (claimed as ${claim.assignee}). The claim is released now.`);
+			task(['release', assertPlainId(claim.taskId, 'claimed task id'), '--as', role.worker]);
+			break;
+		}
+		if (startRun(role, claim)) {
+			started += 1;
+			active += 1;
+		}
+	}
+}
+console.log(`dispatch: done, ${started} run(s) started.`);
