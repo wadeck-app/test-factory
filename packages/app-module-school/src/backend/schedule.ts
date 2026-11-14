@@ -1,4 +1,6 @@
 import type { ModuleContext } from '@wadeck-app/app-core-sdk';
+import { CONFLICT, NOT_FOUND, type Refusal, refuse } from './http';
+import { badRequest, notFound, deleted } from './http';
 import type { CollectionStore, Store } from './store';
 
 export const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri'] as const;
@@ -184,16 +186,16 @@ export function registerScheduleRoutes(ctx: ModuleContext, store: Store): void {
   const lookups = storeLookups(store);
 
   // Returns the refusal (status and message) for an input, `selfId` being the entry being updated.
-  const refuse = (input: ScheduleInput, selfId?: string): { status: number; message: string } | undefined => {
+  const checkEntry = (input: ScheduleInput, selfId?: string): Refusal | undefined => {
     if (!lookups.course(input.courseId)) {
-      return { status: 400, message: 'course not found' };
+      return { status: NOT_FOUND, message: "course not found" };
     }
     if (!lookups.classroom(input.classroomId)) {
-      return { status: 400, message: 'classroom not found' };
+      return { status: NOT_FOUND, message: 'classroom not found' };
     }
     const others = (slots().list() as unknown as ScheduleEntry[]).filter((e) => e.id !== selfId);
     const conflict = findConflict(others, input, lookups);
-    return conflict ? { status: 409, message: conflict } : undefined;
+    return conflict ? { status: CONFLICT, message: conflict } : undefined;
   };
 
   ctx.registerRoute('GET', '/schedule', (_req, reply) => reply.send(slots().list()));
@@ -265,11 +267,11 @@ export function registerScheduleRoutes(ctx: ModuleContext, store: Store): void {
   ctx.registerRoute('POST', '/schedule', (req, reply) => {
     const result = validateSchedule(req.body);
     if (!result.ok) {
-      return reply.code(400).send({ message: result.message });
+      return badRequest(reply, result.message);
     }
-    const refusal = refuse(result.value);
+    const refusal = checkEntry(result.value);
     if (refusal) {
-      return reply.code(refusal.status).send({ message: refusal.message });
+      return refuse(reply, refusal);
     }
     return reply.code(201).send(slots().create(result.value));
   });
@@ -277,22 +279,22 @@ export function registerScheduleRoutes(ctx: ModuleContext, store: Store): void {
   ctx.registerRoute('PUT', '/schedule/:id', (req, reply) => {
     const result = validateSchedule(req.body);
     if (!result.ok) {
-      return reply.code(400).send({ message: result.message });
+      return badRequest(reply, result.message);
     }
     if (!slots().get(req.params.id)) {
-      return reply.code(404).send({ message: 'schedule entry not found' });
+      return notFound(reply, 'schedule entry not found');
     }
-    const refusal = refuse(result.value, req.params.id);
+    const refusal = checkEntry(result.value, req.params.id);
     if (refusal) {
-      return reply.code(refusal.status).send({ message: refusal.message });
+      return refuse(reply, refusal);
     }
     return reply.send(slots().update(req.params.id, result.value));
   });
 
   ctx.registerRoute('DELETE', '/schedule/:id', (req, reply) => {
     if (!slots().remove(req.params.id)) {
-      return reply.code(404).send({ message: 'schedule entry not found' });
+      return notFound(reply, 'schedule entry not found');
     }
-    return reply.code(204).send();
+    return deleted(reply, req.params.id);
   });
 }

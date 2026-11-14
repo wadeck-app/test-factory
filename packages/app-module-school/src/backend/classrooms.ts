@@ -1,5 +1,6 @@
 import type { ModuleContext } from '@wadeck-app/app-core-sdk';
 import { countScheduleEntriesForClassroom, findClassroomConflict, usedByEntriesMessage } from './schedule';
+import { badRequest, notFound, refuseConflict, deleted } from './http';
 import type { CollectionStore, Store } from './store';
 
 export interface Classroom {
@@ -40,7 +41,7 @@ export function registerClassroomRoutes(ctx: ModuleContext, store: Store): void 
   ctx.registerRoute('POST', '/classrooms', (req, reply) => {
     const result = validateClassroom(req.body);
     if (!result.ok) {
-      return reply.code(400).send({ message: result.message });
+      return badRequest(reply, result.message);
     }
     return reply.code(201).send(classrooms().create(result.value));
   });
@@ -48,11 +49,11 @@ export function registerClassroomRoutes(ctx: ModuleContext, store: Store): void 
   ctx.registerRoute('PUT', '/classrooms/:id', (req, reply) => {
     const result = validateClassroom(req.body);
     if (!result.ok) {
-      return reply.code(400).send({ message: result.message });
+      return badRequest(reply, result.message);
     }
     const current = classrooms().get(req.params.id) as unknown as Classroom | undefined;
     if (!current) {
-      return reply.code(404).send({ message: 'classroom not found' });
+      return notFound(reply, 'classroom not found');
     }
     // only a smaller capacity can break the schedule
     const conflict =
@@ -60,7 +61,7 @@ export function registerClassroomRoutes(ctx: ModuleContext, store: Store): void 
         ? findClassroomConflict(store, { id: current.id, name: result.value.name, capacity: result.value.capacity })
         : undefined;
     if (conflict) {
-      return reply.code(409).send({ message: conflict });
+      return refuseConflict(reply, conflict);
     }
     return reply.send(classrooms().update(req.params.id, result.value));
   });
@@ -68,11 +69,11 @@ export function registerClassroomRoutes(ctx: ModuleContext, store: Store): void 
   ctx.registerRoute('DELETE', '/classrooms/:id', (req, reply) => {
     const used = classrooms().get(req.params.id) ? countScheduleEntriesForClassroom(store, req.params.id) : 0;
     if (used > 0) {
-      return reply.code(409).send({ message: usedByEntriesMessage('classroom', used) });
+      return refuseConflict(reply, usedByEntriesMessage('classroom', used));
     }
     if (!classrooms().remove(req.params.id)) {
-      return reply.code(404).send({ message: 'classroom not found' });
+      return notFound(reply, 'classroom not found');
     }
-    return reply.send({ deleted: req.params.id });
+    return deleted(reply, req.params.id);
   });
 }

@@ -114,7 +114,7 @@ describe('schedule routes', () => {
     expect(moved.status).toBe(200);
     expect(moved.payload).toEqual({ id, ...entry(courseA, room, 'tue') });
 
-    expect(call('DELETE /schedule/:id', undefined, id).status).toBe(204);
+    expect(call('DELETE /schedule/:id', undefined, id).payload).toEqual({ deleted: id });
     expect(call('GET /schedule').payload).toEqual([]);
   });
 
@@ -213,17 +213,17 @@ describe('schedule routes', () => {
     expect(free.status).toBe(200);
     expect(call('PUT /schedule/:id', entry(courseA, room2, 'tue'), id).status).toBe(409);
     expect(call('PUT /schedule/:id', entry(courseA, room, 'sun'), id).status).toBe(400);
-    expect(call('PUT /schedule/:id', entry('nope', room), id).status).toBe(400);
-    expect(call('PUT /schedule/:id', entry(courseA, 'nope'), id).status).toBe(400);
+    expect(call('PUT /schedule/:id', entry('nope', room), id).status).toBe(404);
+    expect(call('PUT /schedule/:id', entry(courseA, 'nope'), id).status).toBe(404);
     const stored = (call('GET /schedule').payload as { id: string }[]).find((e) => e.id === id);
     expect(stored).toEqual({ id, ...entry(courseA, room, 'mon', '09:00-10:00') });
   });
 
-  it('answers 400 on invalid input and unknown references', () => {
+  it('answers 400 on invalid input and 404 on unknown references', () => {
     expect(call('POST /schedule', entry(courseA, room, 'sun')).status).toBe(400);
     expect(call('POST /schedule', entry(courseA, room, 'mon', 'noon')).status).toBe(400);
-    expect(call('POST /schedule', entry('nope', room)).status).toBe(400);
-    expect(call('POST /schedule', entry(courseA, 'nope')).status).toBe(400);
+    expect(call('POST /schedule', entry('nope', room)).status).toBe(404);
+    expect(call('POST /schedule', entry(courseA, 'nope')).status).toBe(404);
   });
 
   it('builds the grid, the entries list and the options', () => {
