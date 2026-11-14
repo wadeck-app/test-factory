@@ -10,4 +10,8 @@ export default {
 		'**/dist-module/**',
 		'**/.app-core-dev/**',
 	],
+	rules: {
+		// src/backend/index.ts and src/dsl-components/index.ts are fixed app-module entry points, not barrels (same exemption as app-core).
+		'ts/no-barrel-index': { $exclude: ['**/app-module-*/src/backend/index.ts', '**/app-module-*/src/dsl-components/index.ts'] },
+	},
 } satisfies ViolationsConfig;
