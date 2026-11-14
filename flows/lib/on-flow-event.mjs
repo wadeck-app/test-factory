@@ -84,6 +84,15 @@ if (recorded !== undefined && recorded.executionId !== executionId) {
 	console.log(`on-flow-event: execution ${executionId} is not the current run of task ${taskId} (${recorded.executionId} is), stale event ignored.`);
 	process.exit(0);
 }
+// A flow only concerns a task that is in the status it works on (or on hold, handled below). Any other status means the task moved on
+// (a later run, a human): an event replayed by the queue must not move it back or park it.
+const STATUSES_OF_FLOW = { triage: ['new', 'on-hold'], plan: ['backlog', 'on-hold'], integrate: ['integrating', 'integrated', 'planned', 'on-hold'] };
+const expectedStatuses = flowId.startsWith('build_') ? ['in-progress', 'on-hold'] : STATUSES_OF_FLOW[flowId];
+const statusNow = currentStatus(taskId);
+if (!expectedStatuses.includes(statusNow)) {
+	console.log(`on-flow-event: task ${taskId} is "${statusNow}", not in ${expectedStatuses.join('/')} where ${flowId} ${executionId} works: stale event ignored.`);
+	process.exit(0);
+}
 clearActiveRun(taskId, executionId);
 
 // A human hold always wins: a run that finishes after the hold publishes its result but never moves the task.
