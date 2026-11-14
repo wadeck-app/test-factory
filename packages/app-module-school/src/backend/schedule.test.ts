@@ -189,6 +189,34 @@ describe('schedule routes', () => {
     expect(call('GET /slot-options').payload).toHaveLength(4);
   });
 
+  it('refuses to delete a classroom used by schedule entries, then allows it', () => {
+    const a = idOf(call('POST /schedule', entry(courseA, room)));
+    const b = idOf(call('POST /schedule', entry(courseB, room, 'tue')));
+    const refused = call('DELETE /classrooms/:id', undefined, room);
+    expect(refused.status).toBe(409);
+    expect(messageOf(refused)).toBe('classroom is used by 2 schedule entries');
+    call('DELETE /schedule/:id', undefined, a);
+    expect(messageOf(call('DELETE /classrooms/:id', undefined, room))).toBe('classroom is used by 1 schedule entry');
+    call('DELETE /schedule/:id', undefined, b);
+    const ok = call('DELETE /classrooms/:id', undefined, room);
+    expect(ok.status).toBe(200);
+    expect(ok.payload).toEqual({ deleted: room });
+    expect(call('DELETE /classrooms/:id', undefined, room).status).toBe(404);
+    expect(messageOf(call('DELETE /classrooms/:id', undefined, 'nope'))).toBe('classroom not found');
+  });
+
+  it('refuses to delete a course used by schedule entries, then allows it', () => {
+    const a = idOf(call('POST /schedule', entry(courseA, room)));
+    const refused = call('DELETE /courses/:id', undefined, courseA);
+    expect(refused.status).toBe(409);
+    expect(messageOf(refused)).toBe('course is used by 1 schedule entry');
+    expect((call('GET /courses').payload as unknown[]).length).toBe(4);
+    call('DELETE /schedule/:id', undefined, a);
+    expect(call('DELETE /courses/:id', undefined, courseA).status).toBe(200);
+    expect(call('DELETE /courses/:id', undefined, courseA).status).toBe(404);
+    expect(call('DELETE /courses/:id', undefined, courseB).status).toBe(200);
+  });
+
   it('answers 404 for an unknown entry', () => {
     expect(call('PUT /schedule/:id', entry(courseA, room), 'nope').status).toBe(404);
     expect(call('DELETE /schedule/:id', undefined, 'nope').status).toBe(404);

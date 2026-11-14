@@ -1,4 +1,5 @@
 import type { ModuleContext } from '@wadeck-app/app-core-sdk';
+import { countScheduleEntriesForClassroom, usedByEntriesMessage } from './schedule';
 import type { CollectionStore, Store } from './store';
 
 export interface Classroom {
@@ -57,6 +58,10 @@ export function registerClassroomRoutes(ctx: ModuleContext, store: Store): void 
   });
 
   ctx.registerRoute('DELETE', '/classrooms/:id', (req, reply) => {
+    const used = classrooms().get(req.params.id) ? countScheduleEntriesForClassroom(store, req.params.id) : 0;
+    if (used > 0) {
+      return reply.code(409).send({ message: usedByEntriesMessage('classroom', used) });
+    }
     if (!classrooms().remove(req.params.id)) {
       return reply.code(404).send({ message: 'classroom not found' });
     }
