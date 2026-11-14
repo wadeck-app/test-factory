@@ -55,6 +55,21 @@ export function isTeacherUsed(store: Store, teacherId: string): boolean {
   return store.collection('courses').list().some((c) => c.teacherId === teacherId);
 }
 
+// Message naming the courses of the teacher whose subject is not in `subjects`, if any.
+export function findCourseWithRemovedSubject(store: Store, teacherId: string, subjects: string[]): string | undefined {
+  const classes = store.collection('classes').list() as unknown as StudentClass[];
+  const stranded = (store.collection('courses').list() as unknown as Course[]).filter(
+    (c) => c.teacherId === teacherId && !subjects.includes(c.subject),
+  );
+  if (stranded.length === 0) {
+    return undefined;
+  }
+  const names = stranded.map(
+    (c) => `${c.subject} for class ${classes.find((k) => k.id === c.studentClassId)?.name ?? '?'} (course ${c.id})`,
+  );
+  return `subject still used by course: ${names.join(', ')}`;
+}
+
 export function isStudentClassUsed(store: Store, studentClassId: string): boolean {
   return store.collection('courses').list().some((c) => c.studentClassId === studentClassId);
 }
