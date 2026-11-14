@@ -11,7 +11,7 @@
 #   push       host   push the task branch (the integrator fetches it from origin)
 
 id: build_bug
-version: '0.4.0'
+version: '0.4.1'
 name: 'Build: a bug fix'
 description: 'Sync a pool slot, implement the task with a sandboxed model, gate it, commit and push the task branch'
 
@@ -82,7 +82,13 @@ steps:
       - Only edit files under packages/. Follow the existing layout of packages/app-module-school (app-core app-module: views are YAML in src/dsl-views, backend in src/backend/index.ts).
       - The dependencies are already installed: you can run "npm run build", "npm test" and "npm run violations" yourself. Do not add or change dependencies (package.json, package-lock.json): the flow refuses such a change. The flow runs build, tests and violations again and sends you what failed.
       - Never run git commit, git push, git checkout or git reset: the flow commits for you.
-      - Finish with a short summary of what you changed.
+      - Cover EVERY part of the task. For a page: add its entry in manifest.json, and in its view the create, edit (PUT) AND delete actions when the task says CRUD.
+      - For every route you add, test the success path AND each refusal (400, 404, 409). For a deletion or an edit of something other records reference,
+        decide what happens to them (refuse with 409, or cascade) and test it.
+      - Before writing a helper, grep src/backend for an existing one; extract it instead of copying more than 5 lines.
+      - Never hand-write typings for a library or a Node built-in: if a type is missing, say so in your final summary instead.
+      - Before finishing, re-read the task's "Check" line and verify each point in the code.
+      - Finish with a short summary of what you changed, then one line "Not verified: ..." listing what you could not check (for example how the DSL displays an error), or "Not verified: none".
 
       The first lines below are the state of your branch: its name, the commit you start from, "new" or "resume", then the files in conflict.
       "resume" means the branch already holds earlier work (see git log): continue from it. Files in conflict contain conflict markers
