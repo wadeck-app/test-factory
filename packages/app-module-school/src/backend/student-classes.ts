@@ -1,4 +1,5 @@
 import type { ModuleContext } from '@wadeck-app/app-core-sdk';
+import { isStudentClassUsed } from './courses';
 import type { CollectionStore, Store } from './store';
 
 export interface StudentClass {
@@ -54,6 +55,9 @@ export function registerStudentClassRoutes(ctx: ModuleContext, store: Store): vo
   });
 
   ctx.registerRoute('DELETE', '/student-classes/:id', (req, reply) => {
+    if (studentClasses().get(req.params.id) && isStudentClassUsed(store, req.params.id)) {
+      return reply.code(409).send({ message: 'student class is used by a course' });
+    }
     if (!studentClasses().remove(req.params.id)) {
       return reply.code(404).send({ message: 'student class not found' });
     }

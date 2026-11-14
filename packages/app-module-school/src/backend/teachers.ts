@@ -1,4 +1,5 @@
 import type { ModuleContext } from '@wadeck-app/app-core-sdk';
+import { isTeacherUsed } from './courses';
 import type { CollectionStore, Store } from './store';
 
 export interface Teacher {
@@ -60,6 +61,9 @@ export function registerTeacherRoutes(ctx: ModuleContext, store: Store): void {
   });
 
   ctx.registerRoute('DELETE', '/teachers/:id', (req, reply) => {
+    if (teachers().get(req.params.id) && isTeacherUsed(store, req.params.id)) {
+      return reply.code(409).send({ message: 'teacher is used by a course' });
+    }
     if (!teachers().remove(req.params.id)) {
       return reply.code(404).send({ message: 'teacher not found' });
     }

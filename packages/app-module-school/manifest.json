@@ -28,6 +28,15 @@
         "type": "path",
         "value": "./src/dsl-views/student-classes.yaml"
       }
+    },
+    {
+      "kind": "page",
+      "slot": "nav",
+      "label": "Courses",
+      "view": {
+        "type": "path",
+        "value": "./src/dsl-views/courses.yaml"
+      }
     }
   ]
 }
