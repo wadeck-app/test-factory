@@ -85,7 +85,8 @@ for (const item of tasks) {
 		ids.push(undefined);
 		continue;
 	}
-	const created = parseJson(task(['new', item.title, '--description-file', '-', '--json'], item.description), `task new "${item.title}"`);
+	// The shell of the Windows .cmd shim splits arguments on spaces: the title must be quoted (safeTitle removed every double quote).
+	const created = parseJson(task(['new', `"${item.title}"`, '--description-file', '-', '--json'], item.description), `task new "${item.title}"`);
 	assertPlainId(created.id, 'created task id');
 	task(['set-priority', created.id, item.priority]);
 	ids.push(created.id);
