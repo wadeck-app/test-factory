@@ -27,7 +27,6 @@ items:
     emptyMessage: No classroom yet
     onAction: $ctx.onAction
     columns:
-      - { field: id, label: Id }
       - { field: name, label: Name }
       - { field: capacity, label: Capacity }
       - { field: building, label: Building }
