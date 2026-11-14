@@ -1,0 +1,42 @@
+# Reference (NOT active) wiring of events to the dispatcher. An event only means "look at the backlog": the dispatcher
+# reads the truth from `task`, so duplicates and extra events are harmless, and one missed event is repaired by the next one.
+# Activate only once the issues-repo token and the npm token exist, otherwise every event starts a build that cannot run.
+#
+# Queue has no concurrency lock between two events of a cli subscriber: the mutual exclusion lives in dispatch.mjs.
+# Only plain text on the command line (the queue refuses double quotes in arguments).
+#
+# Where each block goes:
+#   - task events (onStatusChange, ...): <project>/.queue/subscribers.yml  (carry the project folder as cwd)
+#   - relay events (on.github.*) and flow events: global ~/.config/queue/subscribers.yml, e.g. with `queue sub add ...`
+#     (relay events have no project folder; the command below does not need one: dispatch.mjs resolves its own folder)
+
+subscribers:
+  # Source of truth for GitHub-hosted tasks: ONE source, so a task created in the UI, by the PM or by the task CLI is handled
+  # the same way. The relay can be filtered at the source with payloadMatch {"repository.full_name": "wadeck-app/test-factory_issues"}
+  # in relay.yml (and a distinct queueEvent name); the `when:` below is the second line of defence.
+  on.github.issues:
+    - type: cli
+      name: dispatch-on-issue
+      command: node C:/Workspace_Tooling/_test-factory/flows/lib/dispatch.mjs
+      timeout: 2m
+      when: payload.repository.full_name=wadeck-app/test-factory_issues
+
+  # A build finished (success or failure): a slot is free, take the next task.
+  flow.execution.completed:
+    - type: cli
+      name: dispatch-on-completed
+      command: node C:/Workspace_Tooling/_test-factory/flows/lib/dispatch.mjs
+      timeout: 2m
+  flow.execution.failed:
+    - type: cli
+      name: dispatch-on-failed
+      command: node C:/Workspace_Tooling/_test-factory/flows/lib/dispatch.mjs
+      timeout: 2m
+
+  # Local strategy only (tests without GitHub): a task became planned through the task CLI.
+  onStatusChange:
+    - type: cli
+      name: dispatch-on-planned
+      command: node C:/Workspace_Tooling/_test-factory/flows/lib/dispatch.mjs
+      timeout: 2m
+      when: payload.newStatus=planned
