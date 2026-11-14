@@ -1,21 +1,14 @@
 import type { ModuleContext } from '@wadeck-app/app-core-sdk';
 import { findCourseWithRemovedSubject, isTeacherUsed } from './courses';
-import { badRequest, notFound, refuseConflict, deleted } from './http';
+import { type Validation, badRequest, bodyAsObject, notFound, refuseConflict, deleted } from './http';
 import type { CollectionStore, Store } from './store';
+import type { Teacher, TeacherInput } from './types';
 
-export interface Teacher {
-  id: string;
-  name: string;
-  subjects: string[];
-}
-
-export type TeacherInput = Omit<Teacher, 'id'>;
-
-type Validation = { ok: true; value: TeacherInput } | { ok: false; message: string };
+export type { Teacher, TeacherInput };
 
 // `subjects` is a list of strings; a comma separated string (as sent by the form) is split into one.
-export function validateTeacher(body: unknown): Validation {
-  const data: { name?: unknown; subjects?: unknown } = typeof body === 'object' && body !== null ? body : {};
+export function validateTeacher(body: unknown): Validation<TeacherInput> {
+  const data = bodyAsObject(body);
   if (typeof data.name !== 'string' || data.name.trim() === '') {
     return { ok: false, message: 'name is required' };
   }

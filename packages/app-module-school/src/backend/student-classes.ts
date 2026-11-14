@@ -1,24 +1,15 @@
 import type { ModuleContext } from '@wadeck-app/app-core-sdk';
 import { isStudentClassUsed } from './courses';
 import { findStudentClassConflict } from './schedule';
-import { badRequest, notFound, refuseConflict, deleted } from './http';
+import { type Validation, badRequest, bodyAsObject, notFound, refuseConflict, deleted } from './http';
 import type { CollectionStore, Store } from './store';
+import type { StudentClass, StudentClassInput } from './types';
 
-export interface StudentClass {
-  id: string;
-  name: string;
-  level: string;
-  studentCount: number;
-}
-
-export type StudentClassInput = Omit<StudentClass, 'id'>;
-
-type Validation = { ok: true; value: StudentClassInput } | { ok: false; message: string };
+export type { StudentClass, StudentClassInput };
 
 // `name` and `level` are non-empty strings; `studentCount` must be an integer >= 0 (strictly a number).
-export function validateStudentClass(body: unknown): Validation {
-  const data: { name?: unknown; level?: unknown; studentCount?: unknown } =
-    typeof body === 'object' && body !== null ? body : {};
+export function validateStudentClass(body: unknown): Validation<StudentClassInput> {
+  const data = bodyAsObject(body);
   if (typeof data.name !== 'string' || data.name.trim() === '') {
     return { ok: false, message: 'name is required' };
   }
