@@ -1,0 +1,68 @@
+# Deploy flow: put the app-module of a commit of `integration` on the app-core server. Started by the dispatcher once the CI of that
+# commit passed (flows/lib/deploy-trigger.mjs records it). Manual run:
+#   flow run flows/05_deploy.yml -i sha=<commit> --wait
+#
+#   prepare  host   integrator slot on the validated commit
+#   install  host   npm ci for the Linux VM (host registry access, no token in the VM)
+#   package  VM     app-core-cli package (needs the Linux binaries of the slot)
+#   deploy   host   copy the package to .flow/deploy/<id>/<version> and register it in app-core (fails unless app-core confirms)
+
+id: deploy
+version: '0.2.0'
+name: 'Deploy the integration app-module'
+description: 'Package the app-module of a commit of integration whose CI passed and register it in the running app-core'
+
+requires: [sandbox]
+
+workspace: { provider: pool, dir: C:/Workspace_Tooling, prefix: _test-factory_int, count: 1 }
+
+inputs:
+  sha: text
+
+steps:
+  - id: prepare
+    name: 'Put the slot on the validated commit'
+    type: script
+    host: true
+    env:
+      SHA: ${{ inputs.sha }}
+    script: |
+      set -euo pipefail
+      case "$SHA" in *[!0-9a-f]* | '') echo "deploy: the sha input must be a hexadecimal commit id, found '$SHA'" >&2; exit 1 ;; esac
+      bash C:/Workspace_Tooling/_test-factory/flows/lib/sanitize-git.sh https://github.com/wadeck-app/test-factory
+      git fetch -q origin
+      git cat-file -e "$SHA^{commit}" || { echo "deploy: commit $SHA is unknown after fetching origin" >&2; exit 1; }
+      git checkout -q -f --detach "$SHA"
+      git rev-parse --short HEAD
+
+  - id: install
+    name: 'Install the dependencies for the VM'
+    type: script
+    host: true
+    depends: [prepare]
+    timeout: 600
+    script: |
+      set -euo pipefail
+      bash C:/Workspace_Tooling/_test-factory/flows/lib/install-deps.sh
+
+  - id: package
+    name: 'Package the app-module (VM)'
+    type: script
+    shell: bash
+    depends: [install]
+    timeout: 600
+    script: |
+      set -euo pipefail
+      rm -rf packages/app-module-school/dist-module
+      BUNDLE_VERSION="$(date -u +%Y.%m.%d)-$(git rev-list --count HEAD)-$(git rev-parse --short HEAD)" npm run bundle
+
+  - id: deploy
+    name: 'Register the module in app-core'
+    type: script
+    host: true
+    depends: [package]
+    env:
+      SHA: ${{ inputs.sha }}
+    script: |
+      set -euo pipefail
+      node C:/Workspace_Tooling/_test-factory/flows/lib/deploy-module.mjs packages/app-module-school/dist-module school "$SHA"

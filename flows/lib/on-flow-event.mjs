@@ -106,6 +106,16 @@ if (record.status === 'failed') {
 		console.log(`on-flow-event: integration of ${taskId} refused (conflict), task is planned again.`);
 		process.exit(0);
 	}
+	if (flowId === 'integrate' && currentStatus(taskId) === 'integrated') {
+		// The merge is on integration: a later step failed (CI of the pushed commit, packaging, deployment). The task stays integrated
+		// (its code is there), but the humans are told loudly and the failing step is named in the run.
+		act(`task ${taskId}: comment the failure after integration`, () =>
+			comment(taskId, worker, `Integrated, but a step after the merge failed (CI of integration, packaging or deployment): the new version is NOT deployed. Read it with: flow show ${executionId} --io`),
+		);
+		release(taskId, worker);
+		console.error(`on-flow-event: integrate ${executionId} failed AFTER the merge of task ${taskId} (CI, packaging or deployment): nothing deployed, see flow show ${executionId} --io.`);
+		process.exit(0);
+	}
 	act(`task ${taskId} on hold: ${flowId} execution ${executionId} failed`, () =>
 		park(taskId, worker, `the ${flowId} run ${executionId} failed. Read it with: flow show ${executionId} --io. Put the task back to its previous status when fixed.`),
 	);
