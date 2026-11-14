@@ -7,7 +7,9 @@ declare module 'node:fs' {
   export function existsSync(path: string): boolean;
   export function mkdirSync(path: string, options?: { recursive?: boolean }): void;
   export function mkdtempSync(prefix: string): string;
+  export function readdirSync(path: string): string[];
   export function readFileSync(path: string, encoding: 'utf8'): string;
+  export function renameSync(oldPath: string, newPath: string): void;
   export function rmSync(path: string, options?: { recursive?: boolean; force?: boolean }): void;
   export function writeFileSync(path: string, data: string, encoding: 'utf8'): void;
 }
@@ -19,3 +21,5 @@ declare module 'node:os' {
 declare module 'node:path' {
   export function join(...paths: string[]): string;
 }
+
+declare const process: { pid: number };
