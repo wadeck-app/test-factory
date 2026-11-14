@@ -1,0 +1,40 @@
+$sources:
+  courses:
+    url: GET /api/modules/school/course-rows
+  teacherOptions:
+    url: GET /api/modules/school/teacher-options
+  classOptions:
+    url: GET /api/modules/school/student-class-options
+
+$actions:
+  createCourse:
+    url: POST /api/modules/school/courses
+    reloadSources: [courses]
+    successMessage: Course created
+  deleteCourse:
+    url: DELETE /api/modules/school/courses/{id}
+    reloadSources: [courses]
+    confirm: Delete this course?
+    successMessage: Course deleted
+
+$type: VerticalStack
+items:
+  - $type: DataTable
+    rows: $sources.courses
+    emptyMessage: No course yet
+    onAction: $ctx.onAction
+    columns:
+      - { field: subject, label: Subject }
+      - { field: teacherName, label: Teacher }
+      - { field: studentClassName, label: Class }
+      - type: actions
+        items:
+          - { label: Delete, action: deleteCourse, variant: danger }
+  - $type: Form
+    onSubmit: $ctx.createCourse
+    fields:
+      - { $type: FieldText, bind: subject, label: Subject, required: true }
+      - { $type: FieldSelect, bind: teacherId, label: Teacher, options: $sources.teacherOptions, placeholder: Select a teacher, required: true }
+      - { $type: FieldSelect, bind: studentClassId, label: Class, options: $sources.classOptions, placeholder: Select a class, required: true }
+    actions:
+      - { $type: ButtonSave, label: Add course }
