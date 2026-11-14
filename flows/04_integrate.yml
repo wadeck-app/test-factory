@@ -8,11 +8,10 @@
 #   gates      VM     npm ci (token only here), build, test, violations, app-module check on the merged tree
 #   finalize   host   check the merge is intact, commit the merge, push integration, task -> `integrated`
 #
-# KNOWN GAP: a task sent back after a conflict is rebuilt by 03_build_feature from origin/integration: it does not
-# yet update the existing branch (merge integration into it) as the design requires. See the architecture plan.
+# A task sent back after a conflict is built again from its pushed branch: the build flows merge origin/integration into it and the model resolves the conflicts.
 
 id: integrate
-version: '0.1.1'
+version: '0.1.2'
 name: 'Integrate a task branch'
 description: 'Merge the task branch into integration without conflict, run the gates, push integration'
 

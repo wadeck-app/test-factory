@@ -5,13 +5,14 @@
 //   node flows/lib/dispatch.mjs [--dry-run]
 //
 // Environment (all optional):
-//   FACTORY_BUILDERS        max build_feature runs running or queued at once (default 1)
+//   FACTORY_BUILDERS        max build runs (feature, enhancement, bug) running or queued at once (default 1)
 //   FACTORY_ANALYSTS        max triage+plan runs running or queued at once (default 1: one read-only clone)
 //   FACTORY_NPM_TOKEN_FILE  npm token file, relative to the project folder (default ./_secrets_/npm-read-token)
 //   FACTORY_PROJECT         task/flow project name (default test-factory)
 import fs from 'node:fs';
 import path from 'node:path';
 import { assertPlainId, fail, parseJson, park, project, projectDirectory, recordActiveRun, run, runChecked, task } from './factory.mjs';
+import { BUILD_FLOWS, BUILD_KINDS } from './kinds.mjs';
 
 const tokenFile = process.env.FACTORY_NPM_TOKEN_FILE ?? './_secrets_/npm-read-token';
 const usage = 'Usage: node flows/lib/dispatch.mjs [--dry-run] [--roles integrate,build,plan,triage]';
@@ -33,7 +34,7 @@ const analysts = capacityOf('FACTORY_ANALYSTS', 1);
 // Order matters: integrating a branch frees work, so it comes first. `pool` = the flows that compete for the same clones.
 const roles = [
 	{ name: 'integrate', worker: 'factory-integrator', status: 'integrating', flow: 'integrate', file: 'flows/04_integrate.yml', pool: ['integrate'], capacity: 1, lease: '1h', npmToken: true },
-	{ name: 'build', worker: 'factory-builder', status: 'planned', flow: 'build_feature', file: 'flows/03_build_feature.yml', pool: ['build_feature'], capacity: builders, lease: '2h', npmToken: true, startStatus: 'in-progress' },
+	{ name: 'build', worker: 'factory-builder', status: 'planned', flow: 'build', pool: BUILD_FLOWS, buildByType: BUILD_KINDS, capacity: builders, lease: '2h', npmToken: true, startStatus: 'in-progress' },
 	{ name: 'plan', worker: 'factory-planner', status: 'backlog', flow: 'plan', file: 'flows/02_plan.yml', pool: ['triage', 'plan'], capacity: analysts, lease: '30m', text: true },
 	{ name: 'triage', worker: 'factory-triage', status: 'new', flow: 'triage', file: 'flows/01_triage.yml', pool: ['triage', 'plan'], capacity: analysts, lease: '30m', text: true },
 ];
@@ -98,21 +99,33 @@ function startRun(role, claim) {
 		}
 		inputs.push('-i', `taskB64=${encoded}`);
 	}
+	// The build flow depends on the type of the task (set by the triage).
+	let { flow, file } = role;
+	if (role.buildByType) {
+		const type = claim.task?.type;
+		if (typeof type !== 'string' || !role.buildByType.includes(type)) {
+			park(taskId, role.worker, `the task type ${JSON.stringify(type)} has no build flow (known: ${role.buildByType.join(', ')}). Set the type with: task set-type ${taskId} <type>, then put the task back to ${role.status}.`);
+			task(['release', taskId, '--as', role.worker]);
+			console.error(`dispatch: task ${taskId} is on hold: type ${JSON.stringify(type)} has no build flow.`);
+			return 'skipped';
+		}
+		flow = `build_${type}`;
+		file = `flows/03_build_${type}.yml`;
+	}
 	if (role.npmToken) inputs.push('-i', `NPM_TOKEN=file://${tokenFile}`);
 	if (role.startStatus) task(['set-status', taskId, role.startStatus]);
-	const start = run('flow', ['run', role.file, ...inputs, '-p', project, '--json']);
+	const start = run('flow', ['run', file, ...inputs, '-p', project, '--json']);
 	if (start.status !== 0) {
 		// Give the task back: never leave a task claimed with nothing running for it.
 		if (role.startStatus) task(['set-status', taskId, role.status]);
 		task(['release', taskId, '--as', role.worker]);
-			console.error(`dispatch: flow run ${role.file} failed for task ${taskId}, the task was released${role.startStatus ? ` and put back in "${role.status}"` : ''}. The other roles continue.
-${start.stdout}${start.stderr}`);
-			return 'failed';
+		console.error(`dispatch: flow run ${file} failed for task ${taskId}, the task was released${role.startStatus ? ` and put back in "${role.status}"` : ''}. The other roles continue.\n${start.stdout}${start.stderr}`);
+		return 'failed';
 	}
 	const started = parseJson(start.stdout, 'flow run --json');
 	if (typeof started.executionId !== 'string') fail(`flow run --json for task ${taskId} did not return an executionId: ${start.stdout.slice(0, 200)}`);
-	recordActiveRun(taskId, role.flow, started.executionId);
-	console.log(`dispatch: started ${role.flow} for task ${taskId} (execution ${started.executionId})`);
+	recordActiveRun(taskId, flow, started.executionId);
+	console.log(`dispatch: started ${flow} for task ${taskId} (execution ${started.executionId})`);
 	return 'started';
 }
 

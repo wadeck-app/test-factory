@@ -13,13 +13,16 @@
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { BUILD_FLOWS } from './kinds.mjs';
 import { assertPlainId, clearActiveRun, comment, completeResponse, fail, parseJson, park, project, showExecution, task, taskIdOf } from './factory.mjs';
 
 const TYPES = ['feature', 'enhancement', 'bug', 'question', 'audit'];
 const PRIORITIES = ['urgent', 'high', 'medium', 'low'];
 // task comments accept 1 to 10000 characters
 const COMMENT_LIMIT = 9500;
-const WORKERS = { triage: 'factory-triage', plan: 'factory-planner', build_feature: 'factory-builder', integrate: 'factory-integrator' };
+const WORKERS = { triage: 'factory-triage', plan: 'factory-planner', integrate: 'factory-integrator', ...Object.fromEntries(BUILD_FLOWS.map((flow) => [flow, 'factory-builder'])) };
+// Types with nothing to implement yet: after triage the task is parked on hold, not planned or built.
+const PARKED_TYPES = ['question', 'audit'];
 
 const usage = 'usage: node flows/lib/on-flow-event.mjs <executionId> [--dry-run] [--roles integrate,build,plan,triage]';
 const args = process.argv.slice(2);
@@ -130,10 +133,15 @@ if (flowId === 'triage') {
 		task(['set-type', taskId, verdict.type]);
 		task(['set-priority', taskId, verdict.priority]);
 		comment(taskId, worker, `Triage: type ${verdict.type}, priority ${verdict.priority}.\n\nSummary: ${verdict.summary}\n\nReason: ${verdict.reason}`);
-		setStatus('backlog');
+		if (PARKED_TYPES.includes(verdict.type)) {
+			comment(taskId, worker, `Parked: a ${verdict.type} has nothing to implement, the factory does not handle it yet. Answer it yourself, then close the task.`);
+			setStatus('on-hold');
+		} else {
+			setStatus('backlog');
+		}
 	});
 	release(taskId, worker);
-	console.log(`on-flow-event: task ${taskId} triaged (${verdict.type}, ${verdict.priority}), now backlog.`);
+	console.log(`on-flow-event: task ${taskId} triaged (${verdict.type}, ${verdict.priority}), now ${PARKED_TYPES.includes(verdict.type) ? 'on hold (parked type)' : 'backlog'}.`);
 } else if (flowId === 'plan') {
 	const text = completeResponse(record, 'plan').trim();
 	const lastLine = text.split('\n').filter((line) => line.trim() !== '').at(-1) ?? '';
@@ -157,7 +165,7 @@ if (flowId === 'triage') {
 	});
 	release(taskId, worker);
 	console.log(`on-flow-event: task ${taskId} planned (${ready ? 'ready' : 'waiting for a human decision'}).`);
-} else if (flowId === 'build_feature') {
+} else if (flowId.startsWith('build_')) {
 	act(`task ${taskId}: integrating`, () => {
 		comment(taskId, worker, 'Built, gates passed, branch pushed. Handed to the integrator.');
 		setStatus('integrating');

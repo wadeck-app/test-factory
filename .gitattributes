@@ -1,0 +1,4 @@
+# The flows and scripts run in a Linux VM and under Git Bash: keep LF line endings whatever core.autocrlf says.
+*.yml text eol=lf
+*.sh text eol=lf
+*.mjs text eol=lf

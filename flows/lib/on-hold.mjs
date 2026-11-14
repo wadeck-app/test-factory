@@ -8,10 +8,11 @@
 //
 // LIMITS (also told in the task comment): an execution that has not started any step has no recorded task id, so it cannot be
 // attributed: it is listed, never guessed. A held build is NOT resumed from its branch yet: the next build starts from integration again.
+import { BUILD_FLOWS } from './kinds.mjs';
 import { activeRunOf, assertPlainId, comment, fail, parseJson, project, projectDirectory, run, runChecked, showExecution, task } from './factory.mjs';
 import path from 'node:path';
 
-const FLOWS = ['build_feature', 'integrate', 'triage', 'plan'];
+const FLOWS = [...BUILD_FLOWS, 'integrate', 'triage', 'plan'];
 const SLOTS = ['_test-factory_wt1', '_test-factory_wt2', '_test-factory_wt3', '_test-factory_wt4'];
 // The clones are siblings of the project folder (pool dir of the flows).
 const POOL_DIRECTORY = path.dirname(projectDirectory).replaceAll(path.sep, '/');
@@ -64,7 +65,7 @@ for (const { flow, executionId } of cancelled) {
 }
 
 // The build's clone: the slot whose checked out branch is the task branch (the flow names it <taskId>-<slug>).
-if (cancelled.some(({ flow }) => flow === 'build_feature')) {
+if (cancelled.some(({ flow }) => flow.startsWith('build_'))) {
 	const branch = runChecked('node', [path.join(projectDirectory, 'flows/lib/branch-name.mjs')], task(['show', taskId, '--json'])).trim();
 	const slot = SLOTS.find((name) => run('git', ['-C', `${POOL_DIRECTORY}/${name}`, 'rev-parse', '--abbrev-ref', 'HEAD']).stdout.trim() === branch);
 	if (slot === undefined) {
@@ -90,7 +91,11 @@ if (cancelled.some(({ flow }) => flow === 'build_feature')) {
 if (unattributed.length > 0) {
 	lines.push(`${unattributed.length} run(s) could not be attributed to this task (no step started yet): ${unattributed.map(({ flow, executionId }) => `${flow} ${executionId}`).join(', ')}. Cancel the right one with: flow cancel <id>`);
 }
-if (lines.length === 0) lines.push('no running work for this task');
+// Nothing to stop (a parked or failed task has no run): stay silent instead of commenting on every automatic hold.
+if (lines.length === 0) {
+	console.log(`on-hold: task ${taskId} has no running work, nothing to stop.`);
+	process.exit(0);
+}
 const text = `Put on hold: ${lines.join('; ')}.`;
 if (dryRun) console.log(`DRY RUN: comment: ${text}`);
 else comment(taskId, 'factory-hold', text);

@@ -12,6 +12,7 @@
     "check": "npm run check --workspace=packages/app-module-school",
     "violations": "violations check",
     "check:scripts": "node scripts/check-scripts.mjs",
+    "generate:flows": "node flows/lib/generate-build-flows.mjs",
     "bundle": "npm run bundle --workspace=packages/app-module-school",
     "clean": "npm run clean --workspace=packages/app-module-school"
   },
