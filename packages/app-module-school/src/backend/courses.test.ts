@@ -63,6 +63,22 @@ describe('course routes', () => {
     expect(call('GET /student-class-options').payload).toEqual([{ value: classId, label: '6A' }]);
   });
 
+  it('lists the subjects of a teacher', () => {
+    const two = call('POST /teachers', { name: 'Bob', subjects: ['Math', 'Physics'] }).payload as { id: string };
+    const ok = call('GET /subject-options/:id', undefined, two.id);
+    expect(ok.status).toBe(200);
+    expect(ok.payload).toEqual([
+      { value: 'Math', label: 'Math' },
+      { value: 'Physics', label: 'Physics' },
+    ]);
+    expect(call('GET /subject-options/:id', undefined, teacherId).payload).toEqual([{ value: 'Math', label: 'Math' }]);
+  });
+
+  it('refuses subject options of an unknown teacher or without teacher id', () => {
+    expect(call('GET /subject-options/:id', undefined, 'nope').status).toBe(404);
+    expect(call('GET /subject-options').status).toBe(400);
+  });
+
   it('answers 400 on invalid input', () => {
     const { id } = call('POST /courses', valid()).payload as { id: string };
     expect(call('POST /courses', { ...valid(), subject: undefined }).status).toBe(400);
