@@ -1,6 +1,7 @@
 import type { ModuleContext } from '@wadeck-app/app-core-sdk';
 import { isStudentClassUsed } from './courses';
 import { findStudentClassConflict } from './schedule';
+import { badRequest, notFound, refuseConflict, deleted } from './http';
 import type { CollectionStore, Store } from './store';
 
 export interface StudentClass {
@@ -38,7 +39,7 @@ export function registerStudentClassRoutes(ctx: ModuleContext, store: Store): vo
   ctx.registerRoute('POST', '/student-classes', (req, reply) => {
     const result = validateStudentClass(req.body);
     if (!result.ok) {
-      return reply.code(400).send({ message: result.message });
+      return badRequest(reply, result.message);
     }
     return reply.code(201).send(studentClasses().create(result.value));
   });
@@ -46,11 +47,11 @@ export function registerStudentClassRoutes(ctx: ModuleContext, store: Store): vo
   ctx.registerRoute('PUT', '/student-classes/:id', (req, reply) => {
     const result = validateStudentClass(req.body);
     if (!result.ok) {
-      return reply.code(400).send({ message: result.message });
+      return badRequest(reply, result.message);
     }
     const current = studentClasses().get(req.params.id) as unknown as StudentClass | undefined;
     if (!current) {
-      return reply.code(404).send({ message: 'student class not found' });
+      return notFound(reply, 'student class not found');
     }
     // only a bigger class can break the schedule
     const conflict =
@@ -62,18 +63,18 @@ export function registerStudentClassRoutes(ctx: ModuleContext, store: Store): vo
           })
         : undefined;
     if (conflict) {
-      return reply.code(409).send({ message: conflict });
+      return refuseConflict(reply, conflict);
     }
     return reply.send(studentClasses().update(req.params.id, result.value));
   });
 
   ctx.registerRoute('DELETE', '/student-classes/:id', (req, reply) => {
     if (studentClasses().get(req.params.id) && isStudentClassUsed(store, req.params.id)) {
-      return reply.code(409).send({ message: 'student class is used by a course' });
+      return refuseConflict(reply, 'student class is used by a course');
     }
     if (!studentClasses().remove(req.params.id)) {
-      return reply.code(404).send({ message: 'student class not found' });
+      return notFound(reply, 'student class not found');
     }
-    return reply.send({ deleted: req.params.id });
+    return deleted(reply, req.params.id);
   });
 }

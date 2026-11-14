@@ -1,5 +1,7 @@
 import type { ModuleContext } from '@wadeck-app/app-core-sdk';
 import { countScheduleEntriesForCourse, findCourseConflict, usedByEntriesMessage } from './schedule';
+import { NOT_FOUND, type Refusal, UNPROCESSABLE, refuse } from './http';
+import { badRequest, notFound, refuseConflict, deleted } from './http';
 import type { CollectionStore, Store } from './store';
 
 export interface Course {
@@ -37,16 +39,16 @@ type Teacher = { id: string; name: string; subjects: string[] };
 type StudentClass = { id: string; name: string };
 
 // Checks that the referenced teacher and class exist and that the teacher teaches the subject.
-function checkReferences(store: Store, input: CourseInput): { status: number; message: string } | undefined {
+function checkReferences(store: Store, input: CourseInput): Refusal | undefined {
   const teacher = store.collection('teachers').get(input.teacherId) as unknown as Teacher | undefined;
   if (!teacher) {
-    return { status: 404, message: 'teacher not found' };
+    return { status: NOT_FOUND, message: 'teacher not found' };
   }
   if (!store.collection('classes').get(input.studentClassId)) {
-    return { status: 404, message: 'student class not found' };
+    return { status: NOT_FOUND, message: 'student class not found' };
   }
   if (!Array.isArray(teacher.subjects) || !teacher.subjects.includes(input.subject)) {
-    return { status: 422, message: `subject "${input.subject}" is not taught by ${teacher.name}` };
+    return { status: UNPROCESSABLE, message: `subject "${input.subject}" is not taught by ${teacher.name}` };
   }
   return undefined;
 }
@@ -107,11 +109,11 @@ export function registerCourseRoutes(ctx: ModuleContext, store: Store): void {
   ctx.registerRoute('POST', '/courses', (req, reply) => {
     const result = validateCourse(req.body);
     if (!result.ok) {
-      return reply.code(400).send({ message: result.message });
+      return badRequest(reply, result.message);
     }
     const refusal = checkReferences(store, result.value);
     if (refusal) {
-      return reply.code(refusal.status).send({ message: refusal.message });
+      return refuse(reply, refusal);
     }
     return reply.code(201).send(courses().create(result.value));
   });
@@ -119,15 +121,15 @@ export function registerCourseRoutes(ctx: ModuleContext, store: Store): void {
   ctx.registerRoute('PUT', '/courses/:id', (req, reply) => {
     const result = validateCourse(req.body);
     if (!result.ok) {
-      return reply.code(400).send({ message: result.message });
+      return badRequest(reply, result.message);
     }
     const current = courses().get(req.params.id);
     if (!current) {
-      return reply.code(404).send({ message: 'course not found' });
+      return notFound(reply, 'course not found');
     }
     const refusal = checkReferences(store, result.value);
     if (refusal) {
-      return reply.code(refusal.status).send({ message: refusal.message });
+      return refuse(reply, refusal);
     }
     // only another teacher or class can break the schedule
     const changed = current.teacherId !== result.value.teacherId || current.studentClassId !== result.value.studentClassId;
@@ -139,7 +141,7 @@ export function registerCourseRoutes(ctx: ModuleContext, store: Store): void {
         })
       : undefined;
     if (conflict) {
-      return reply.code(409).send({ message: conflict });
+      return refuseConflict(reply, conflict);
     }
     return reply.send(courses().update(req.params.id, result.value));
   });
@@ -147,11 +149,11 @@ export function registerCourseRoutes(ctx: ModuleContext, store: Store): void {
   ctx.registerRoute('DELETE', '/courses/:id', (req, reply) => {
     const used = courses().get(req.params.id) ? countScheduleEntriesForCourse(store, req.params.id) : 0;
     if (used > 0) {
-      return reply.code(409).send({ message: usedByEntriesMessage('course', used) });
+      return refuseConflict(reply, usedByEntriesMessage('course', used));
     }
     if (!courses().remove(req.params.id)) {
-      return reply.code(404).send({ message: 'course not found' });
+      return notFound(reply, 'course not found');
     }
-    return reply.send({ deleted: req.params.id });
+    return deleted(reply, req.params.id);
   });
 }

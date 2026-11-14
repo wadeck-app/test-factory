@@ -1,5 +1,6 @@
 import type { ModuleContext } from '@wadeck-app/app-core-sdk';
 import { findCourseWithRemovedSubject, isTeacherUsed } from './courses';
+import { badRequest, notFound, refuseConflict, deleted } from './http';
 import type { CollectionStore, Store } from './store';
 
 export interface Teacher {
@@ -43,7 +44,7 @@ export function registerTeacherRoutes(ctx: ModuleContext, store: Store): void {
   ctx.registerRoute('POST', '/teachers', (req, reply) => {
     const result = validateTeacher(req.body);
     if (!result.ok) {
-      return reply.code(400).send({ message: result.message });
+      return badRequest(reply, result.message);
     }
     return reply.code(201).send(teachers().create(result.value));
   });
@@ -51,25 +52,25 @@ export function registerTeacherRoutes(ctx: ModuleContext, store: Store): void {
   ctx.registerRoute('PUT', '/teachers/:id', (req, reply) => {
     const result = validateTeacher(req.body);
     if (!result.ok) {
-      return reply.code(400).send({ message: result.message });
+      return badRequest(reply, result.message);
     }
     if (!teachers().get(req.params.id)) {
-      return reply.code(404).send({ message: 'teacher not found' });
+      return notFound(reply, 'teacher not found');
     }
     const conflict = findCourseWithRemovedSubject(store, req.params.id, result.value.subjects);
     if (conflict) {
-      return reply.code(409).send({ message: conflict });
+      return refuseConflict(reply, conflict);
     }
     return reply.send(teachers().update(req.params.id, result.value));
   });
 
   ctx.registerRoute('DELETE', '/teachers/:id', (req, reply) => {
     if (teachers().get(req.params.id) && isTeacherUsed(store, req.params.id)) {
-      return reply.code(409).send({ message: 'teacher is used by a course' });
+      return refuseConflict(reply, 'teacher is used by a course');
     }
     if (!teachers().remove(req.params.id)) {
-      return reply.code(404).send({ message: 'teacher not found' });
+      return notFound(reply, 'teacher not found');
     }
-    return reply.send({ deleted: req.params.id });
+    return deleted(reply, req.params.id);
   });
 }
