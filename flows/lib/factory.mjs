@@ -56,10 +56,12 @@ export function taskIdOf(record) {
 	return fail(`execution ${record.executionId} records no TASK_ID and the dispatcher has no record of it: the flow ${record.flowId} must give a step the env TASK_ID: \${{ inputs.taskId }}.`);
 }
 
+// The execution record keeps at most 4096 characters of a model answer: a longer answer is marked truncated (or only kept as rawOutput).
+// Throws an Error: the caller decides what happens to the task.
 export function completeResponse(record, stepId) {
 	const answer = record.steps?.[stepId]?.io?.outputs?.response;
 	if (!answer || answer.truncated === true || typeof answer.text !== 'string') {
-		return fail(`step "${stepId}" of execution ${record.executionId} has no complete response in the execution record.`);
+		throw new Error(`step "${stepId}" of execution ${record.executionId} has no complete response in the execution record (the record keeps at most 4096 characters of an answer: a longer answer is lost).`);
 	}
 	return answer.text;
 }
