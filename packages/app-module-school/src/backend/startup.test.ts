@@ -1,26 +1,11 @@
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { ModuleContext } from '@wadeck-app/app-core-sdk';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { fakeContext, invoke } from './test-helpers';
 import register from './index';
 import { SAMPLE_CLASSROOMS, SAMPLE_COURSES, SAMPLE_SLOTS, SAMPLE_STUDENT_CLASSES, SAMPLE_TEACHERS } from './seed';
 import { SEEDED_MARKER, SEEDING_MARKER } from './store';
-
-type Handler = (req: { body?: unknown; params: Record<string, string> }, reply: FakeReply) => unknown;
-
-class FakeReply {
-  status = 200;
-  payload: unknown;
-  code(status: number): this {
-    this.status = status;
-    return this;
-  }
-  send(payload: unknown): this {
-    this.payload = payload;
-    return this;
-  }
-}
 
 const LIST_ROUTES = [
   'GET /ping',
@@ -32,19 +17,10 @@ const LIST_ROUTES = [
   'GET /summary',
 ];
 
-// Starts the module through its register function, like the application does.
 function start(dir: string) {
-  const routes = new Map<string, Handler>();
-  const ctx = {
-    dataDir: dir,
-    registerRoute: (method: string, path: string, handler: Handler) => routes.set(`${method} ${path}`, handler),
-  } as unknown as ModuleContext;
+  const { ctx, routes } = fakeContext(dir);
   register(ctx);
-  return (route: string, params: Record<string, string> = {}, body?: unknown) => {
-    const reply = new FakeReply();
-    routes.get(route)!({ body, params }, reply);
-    return reply;
-  };
+  return (route: string, params: Record<string, string> = {}, body?: unknown) => invoke(routes, route, params, body);
 }
 
 function snapshot(call: ReturnType<typeof start>) {

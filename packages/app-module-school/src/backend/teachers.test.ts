@@ -1,37 +1,15 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { ModuleContext } from '@wadeck-app/app-core-sdk';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { caller, fakeContext } from './test-helpers';
 import { createStore } from './store';
 import { registerTeacherRoutes, validateTeacher } from './teachers';
 
-type Handler = (req: { body?: unknown; params: Record<string, string> }, reply: FakeReply) => unknown;
-
-class FakeReply {
-  status = 200;
-  payload: unknown;
-  code(status: number): this {
-    this.status = status;
-    return this;
-  }
-  send(payload: unknown): this {
-    this.payload = payload;
-    return this;
-  }
-}
-
 function setup(dir: string, store = createStore(dir)) {
-  const routes = new Map<string, Handler>();
-  const ctx = {
-    registerRoute: (method: string, path: string, handler: Handler) => routes.set(`${method} ${path}`, handler),
-  } as unknown as ModuleContext;
+  const { ctx, routes } = fakeContext();
   registerTeacherRoutes(ctx, store);
-  return (route: string, body?: unknown, id?: string) => {
-    const reply = new FakeReply();
-    routes.get(route)!({ body, params: id ? { id } : {} }, reply);
-    return reply;
-  };
+  return caller(routes);
 }
 
 describe('validateTeacher', () => {

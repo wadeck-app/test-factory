@@ -1,42 +1,9 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { ModuleContext } from '@wadeck-app/app-core-sdk';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import register from './index';
-import { SEEDED_MARKER } from './store';
+import { idOf, setupModule as setup } from './test-helpers';
 
-type Handler = (req: { body?: unknown; params: Record<string, string> }, reply: FakeReply) => unknown;
-
-class FakeReply {
-  status = 200;
-  payload: unknown;
-  code(status: number): this {
-    this.status = status;
-    return this;
-  }
-  send(payload?: unknown): this {
-    this.payload = payload;
-    return this;
-  }
-}
-
-function setup(dir: string) {
-  const routes = new Map<string, Handler>();
-  const ctx = {
-    dataDir: dir,
-    registerRoute: (method: string, path: string, handler: Handler) => routes.set(`${method} ${path}`, handler),
-  } as unknown as ModuleContext;
-  writeFileSync(join(dir, SEEDED_MARKER), '', 'utf8');
-  register(ctx);
-  return (route: string, body?: unknown, id?: string) => {
-    const reply = new FakeReply();
-    routes.get(route)!({ body, params: id ? { id } : {} }, reply);
-    return reply;
-  };
-}
-
-const idOf = (reply: FakeReply) => (reply.payload as { id: string }).id;
 
 // The shared rule: 400 malformed, 404 unknown record or reference, 409 in use or conflict, DELETE 200 { deleted: id }.
 describe('shared answer rule', () => {
