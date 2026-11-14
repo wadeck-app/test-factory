@@ -8,11 +8,14 @@
 #   install    host   npm ci for the Linux VM on the merged tree (registry access of the host user: no token reaches the VM)
 #   gates      VM     build, test, violations, app-module check on the merged tree
 #   finalize   host   check the merge is intact, commit the merge, push integration, task -> `integrated`
+#   ci         host   wait for the CI of the pushed commit (queue wait ci): a red CI stops here and nothing is deployed
+#   package    VM     app-core-cli package of the merged tree
+#   deploy     host   copy the package to .flow/deploy and register it in the app-core of the HOST (not one in the VM)
 #
 # A task sent back after a conflict is built again from its pushed branch: the build flows merge origin/integration into it and the model resolves the conflicts.
 
 id: integrate
-version: '0.2.0'
+version: '0.3.0'
 name: 'Integrate a task branch'
 description: 'Merge the task branch into integration without conflict, run the gates, push integration'
 
@@ -107,3 +110,44 @@ steps:
       task set-status "$TASK_ID" integrated -p test-factory
       task comment "$TASK_ID" -p test-factory --author test-factory-integrator "Integrated: $BRANCH merged into integration ($(git rev-parse --short HEAD)), gates passed."
       git log --oneline -1
+
+  # The CI of the pushed commit must pass before anything is deployed: the push of integration starts it, `queue wait ci` waits for it.
+  - id: ci
+    name: 'Wait for the CI of the integration commit'
+    type: script
+    host: true
+    depends: [finalize]
+    timeout: 900
+    script: |
+      set -euo pipefail
+      SHA=$(git rev-parse HEAD)
+      code=0
+      queue wait ci "$SHA" --name "test-factory.int-ci-${SHA:0:7}" --timeout 10m --cli-foreground || code=$?
+      case "$code" in
+        0) echo "ci: CI passed for $SHA" ;;
+        1) echo "ci: the CI FAILED for $SHA on integration: integration is broken, nothing is deployed. Open the run of that commit on GitHub." >&2; exit 1 ;;
+        2) echo "ci: no CI result for $SHA within 10 minutes: nothing is deployed. Check GitHub Actions, then run: flow run flows/05_deploy.yml -i sha=$SHA" >&2; exit 1 ;;
+        3) echo "ci: no CI run seen for $SHA (not pushed, wrong repository, or the queue relay is down): nothing is deployed. Then run: flow run flows/05_deploy.yml -i sha=$SHA" >&2; exit 1 ;;
+        *) echo "ci: queue wait ci exited $code for $SHA (usage error): nothing is deployed." >&2; exit 1 ;;
+      esac
+
+  # Deployment goes to the app-core of the HOST (the server started by orch, port in ~/.config/app-core/server.port.json), never to one in the VM.
+  - id: package
+    name: 'Package the app-module (VM)'
+    type: script
+    shell: bash
+    depends: [ci]
+    timeout: 600
+    script: |
+      set -euo pipefail
+      rm -rf packages/app-module-school/dist-module
+      BUNDLE_VERSION="$(date -u +%Y.%m.%d)-$(git rev-list --count HEAD)-$(git rev-parse --short HEAD)" npm run bundle
+
+  - id: deploy
+    name: 'Register the module in the app-core of the host'
+    type: script
+    host: true
+    depends: [package]
+    script: |
+      set -euo pipefail
+      node C:/Workspace_Tooling/_test-factory/flows/lib/deploy-module.mjs packages/app-module-school/dist-module school "$(git rev-parse HEAD)"
