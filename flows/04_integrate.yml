@@ -1,17 +1,18 @@
 # Integration flow: merge a pushed task branch into `integration` without conflict, gates, push. Manual run:
-#   flow run flows/04_integrate.yml -i taskId=<id> -i NPM_TOKEN=file://./_secrets_/npm-read-token --wait
+#   flow run flows/04_integrate.yml -i taskId=<id> --wait
 #
 # One slot (_test-factory_int1) = one integration at a time (the pool serializes the runs).
 #
 #   prepare    host   fetch, local `integration` = origin/integration, merge origin/<branch> WITHOUT committing.
 #                     Conflict: abort the merge, comment the task, send it back to `planned`, fail.
-#   gates      VM     npm ci (token only here), build, test, violations, app-module check on the merged tree
+#   install    host   npm ci for the Linux VM on the merged tree (registry access of the host user: no token reaches the VM)
+#   gates      VM     build, test, violations, app-module check on the merged tree
 #   finalize   host   check the merge is intact, commit the merge, push integration, task -> `integrated`
 #
 # A task sent back after a conflict is built again from its pushed branch: the build flows merge origin/integration into it and the model resolves the conflicts.
 
 id: integrate
-version: '0.1.2'
+version: '0.2.0'
 name: 'Integrate a task branch'
 description: 'Merge the task branch into integration without conflict, run the gates, push integration'
 
@@ -21,10 +22,6 @@ workspace: { provider: pool, dir: C:/Workspace_Tooling, prefix: _test-factory_in
 
 inputs:
   taskId: text
-  NPM_TOKEN:
-    type: password
-    description: 'read:packages token for npm.pkg.github.com, pass as file://./_secrets_/npm-read-token'
-    required: true
 
 steps:
   - id: prepare
@@ -60,17 +57,24 @@ steps:
       fi
       echo "$BRANCH"
 
-  - id: gates
-    name: 'Install, build, test, violations, app-module check on the merged tree (VM)'
+  - id: install
+    name: 'Install the dependencies of the merged tree for the VM'
     type: script
-    shell: bash
+    host: true
     depends: [prepare]
-    secrets: [NPM_TOKEN]
     timeout: 600
     script: |
       set -euo pipefail
-      # Same discipline as the build flow: token env-only, no install scripts, never on disk.
-      env -u NPM_TOKEN npm ci --ignore-scripts --userconfig <(printf '//npm.pkg.github.com/:_authToken=%s\n' "$NPM_TOKEN")
+      bash C:/Workspace_Tooling/_test-factory/flows/lib/install-deps.sh
+
+  - id: gates
+    name: 'Build, test, violations, app-module check on the merged tree (VM)'
+    type: script
+    shell: bash
+    depends: [install]
+    timeout: 600
+    script: |
+      set -euo pipefail
       npm run build
       npm test
       npm run violations

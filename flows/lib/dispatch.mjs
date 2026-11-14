@@ -7,14 +7,12 @@
 // Environment (all optional):
 //   FACTORY_BUILDERS        max build runs (feature, enhancement, bug) running or queued at once (default 1)
 //   FACTORY_ANALYSTS        max triage+plan runs running or queued at once (default 1: one read-only clone)
-//   FACTORY_NPM_TOKEN_FILE  npm token file, relative to the project folder (default ./_secrets_/npm-read-token)
 //   FACTORY_PROJECT         task/flow project name (default test-factory)
 import fs from 'node:fs';
 import path from 'node:path';
 import { assertPlainId, fail, parseJson, park, project, projectDirectory, recordActiveRun, run, runChecked, task } from './factory.mjs';
 import { BUILD_FLOWS, BUILD_KINDS } from './kinds.mjs';
 
-const tokenFile = process.env.FACTORY_NPM_TOKEN_FILE ?? './_secrets_/npm-read-token';
 const usage = 'Usage: node flows/lib/dispatch.mjs [--dry-run] [--roles integrate,build,plan,triage]';
 const dryRun = process.argv.includes('--dry-run');
 const rolesFlag = process.argv.indexOf('--roles');
@@ -33,8 +31,8 @@ const analysts = capacityOf('FACTORY_ANALYSTS', 1);
 
 // Order matters: integrating a branch frees work, so it comes first. `pool` = the flows that compete for the same clones.
 const roles = [
-	{ name: 'integrate', worker: 'factory-integrator', status: 'integrating', flow: 'integrate', file: 'flows/04_integrate.yml', pool: ['integrate'], capacity: 1, lease: '1h', npmToken: true },
-	{ name: 'build', worker: 'factory-builder', status: 'planned', flow: 'build', pool: BUILD_FLOWS, buildByType: BUILD_KINDS, capacity: builders, lease: '2h', npmToken: true, startStatus: 'in-progress' },
+	{ name: 'integrate', worker: 'factory-integrator', status: 'integrating', flow: 'integrate', file: 'flows/04_integrate.yml', pool: ['integrate'], capacity: 1, lease: '1h' },
+	{ name: 'build', worker: 'factory-builder', status: 'planned', flow: 'build', pool: BUILD_FLOWS, buildByType: BUILD_KINDS, capacity: builders, lease: '2h', startStatus: 'in-progress' },
 	{ name: 'plan', worker: 'factory-planner', status: 'backlog', flow: 'plan', file: 'flows/02_plan.yml', pool: ['triage', 'plan'], capacity: analysts, lease: '30m', text: true },
 	{ name: 'triage', worker: 'factory-triage', status: 'new', flow: 'triage', file: 'flows/01_triage.yml', pool: ['triage', 'plan'], capacity: analysts, lease: '30m', text: true },
 ];
@@ -112,7 +110,6 @@ function startRun(role, claim) {
 		flow = `build_${type}`;
 		file = `flows/03_build_${type}.yml`;
 	}
-	if (role.npmToken) inputs.push('-i', `NPM_TOKEN=file://${tokenFile}`);
 	if (role.startStatus) task(['set-status', taskId, role.startStatus]);
 	const start = run('flow', ['run', file, ...inputs, '-p', project, '--json']);
 	if (start.status !== 0) {
