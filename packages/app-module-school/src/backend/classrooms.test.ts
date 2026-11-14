@@ -20,8 +20,9 @@ describe('validateClassroom', () => {
     });
   });
 
-  it('accepts a numeric string capacity and defaults building', () => {
-    expect(validateClassroom({ name: 'A1', capacity: '12' })).toEqual({
+  it('defaults building and refuses a numeric string capacity', () => {
+    expect(validateClassroom({ name: 'A1', capacity: '12' }).ok).toBe(false);
+    expect(validateClassroom({ name: 'A1', capacity: 12 })).toEqual({
       ok: true,
       value: { name: 'A1', capacity: 12, building: '' },
     });
@@ -36,6 +37,8 @@ describe('validateClassroom', () => {
     [{ name: 'A1', capacity: 2.5 }],
     [{ name: 'A1', capacity: 'abc' }],
     [{ name: 'A1', capacity: '-3' }],
+    [{ name: 'A1', capacity: '12' }],
+    [{ name: 'A1', capacity: null }],
     [{ name: 'A1', capacity: 10, building: 4 }],
     [undefined],
   ])('rejects %j', (body) => {
@@ -79,6 +82,13 @@ describe('classroom routes', () => {
     expect(call('POST /classrooms', { name: 'B', capacity: 0 }).status).toBe(400);
     expect(call('PUT /classrooms/:id', { name: 'B', capacity: 1.5 }, id).status).toBe(400);
     expect(call('PUT /classrooms/:id', { capacity: 5 }, id).status).toBe(400);
+    for (const capacity of ['abc', '12', null, 0, -3, 2.5]) {
+      const post = call('POST /classrooms', { name: 'B', capacity });
+      expect(post.status).toBe(400);
+      expect(post.payload).toMatchObject({ message: 'capacity must be a positive integer' });
+      expect(call('PUT /classrooms/:id', { name: 'B', capacity }, id).status).toBe(400);
+      expect(call('PUT /classrooms/:id', { name: 'B', capacity }, 'nope').status).toBe(400);
+    }
     expect(call('GET /classrooms').payload).toEqual([{ id, name: 'A1', capacity: 30, building: '' }]);
   });
 
