@@ -235,3 +235,78 @@ describe('schedule routes', () => {
     expect(call('DELETE /schedule/:id', undefined, 'nope').status).toBe(404);
   });
 });
+
+describe('edits that would break the schedule', () => {
+  let dir: string;
+  let call: ReturnType<typeof setup>;
+  let room: string;
+  let class24: string;
+  let teacher: string;
+  let course: string;
+  let entry: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'school-schedule-edit-'));
+    call = setup(dir);
+    teacher = idOf(call('POST /teachers', { name: 'Ada', subjects: ['Math'] }));
+    class24 = idOf(call('POST /student-classes', { name: '6A', level: '6', studentCount: 24 }));
+    room = idOf(call('POST /classrooms', { name: 'R1', capacity: 30, building: 'Main' }));
+    course = idOf(call('POST /courses', { subject: 'Math', teacherId: teacher, studentClassId: class24 }));
+    entry = idOf(call('POST /schedule', { courseId: course, classroomId: room, day: 'mon', slot: '08:00-09:00' }));
+  });
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('refuses a classroom capacity below the scheduled class, then accepts a larger one', () => {
+    const refused = call('PUT /classrooms/:id', { name: 'R1', capacity: 20, building: 'Main' }, room);
+    expect(refused.status).toBe(409);
+    expect(messageOf(refused)).toContain('capacity conflict');
+    expect(messageOf(refused)).toContain(`entry ${entry}`);
+    expect(messageOf(refused)).toContain('mon 08:00-09:00');
+    expect((call('GET /classrooms').payload as { capacity: number }[])[0].capacity).toBe(30);
+    expect(call('PUT /classrooms/:id', { name: 'R1', capacity: 24, building: 'Main' }, room).status).toBe(200);
+    expect(call('PUT /classrooms/:id', { name: 'R1', capacity: 40, building: 'Main' }, room).status).toBe(200);
+  });
+
+  it('keeps 400 and 404 before the classroom conflict, and allows unscheduled or unrelated edits', () => {
+    expect(call('PUT /classrooms/:id', { name: 'R1', capacity: 0 }, room).status).toBe(400);
+    expect(call('PUT /classrooms/:id', { name: 'R1', capacity: 1 }, 'nope').status).toBe(404);
+    const free = idOf(call('POST /classrooms', { name: 'R2', capacity: 30 }));
+    expect(call('PUT /classrooms/:id', { name: 'R2', capacity: 5 }, free).status).toBe(200);
+    expect(call('PUT /classrooms/:id', { name: 'Renamed', capacity: 30, building: 'B' }, room).status).toBe(200);
+  });
+
+  it('refuses a student count above the capacity of a scheduled room, then accepts a lower one', () => {
+    const body = (studentCount: number) => ({ name: '6A', level: '6', studentCount });
+    const refused = call('PUT /student-classes/:id', body(31), class24);
+    expect(refused.status).toBe(409);
+    expect(messageOf(refused)).toContain('capacity conflict');
+    expect(messageOf(refused)).toContain(`entry ${entry}`);
+    expect((call('GET /student-classes').payload as { studentCount: number }[])[0].studentCount).toBe(24);
+    expect(call('PUT /student-classes/:id', body(30), class24).status).toBe(200);
+    expect(call('PUT /student-classes/:id', body(10), class24).status).toBe(200);
+    expect(call('PUT /student-classes/:id', body(10), 'nope').status).toBe(404);
+    expect(call('PUT /student-classes/:id', { ...body(10), name: '' }, class24).status).toBe(400);
+    const lone = idOf(call('POST /student-classes', { name: '6Z', level: '6', studentCount: 5 }));
+    expect(call('PUT /student-classes/:id', body(500), lone).status).toBe(200);
+  });
+
+  it('names the broken entry when a course changes to a clashing teacher or class', () => {
+    const bob = idOf(call('POST /teachers', { name: 'Bob', subjects: ['Math'] }));
+    const class2 = idOf(call('POST /student-classes', { name: '6B', level: '6', studentCount: 10 }));
+    const room2 = idOf(call('POST /classrooms', { name: 'R2', capacity: 30 }));
+    const other = idOf(call('POST /courses', { subject: 'Math', teacherId: bob, studentClassId: class2 }));
+    call('POST /schedule', { courseId: other, classroomId: room2, day: 'mon', slot: '08:00-09:00' });
+
+    const teacherClash = call('PUT /courses/:id', { subject: 'Math', teacherId: bob, studentClassId: class24 }, course);
+    expect(teacherClash.status).toBe(409);
+    expect(messageOf(teacherClash)).toContain('teacher conflict');
+    expect(messageOf(teacherClash)).toContain(`schedule entry ${entry}`);
+    const classClash = call('PUT /courses/:id', { subject: 'Math', teacherId: teacher, studentClassId: class2 }, course);
+    expect(classClash.status).toBe(409);
+    expect(messageOf(classClash)).toContain('class conflict');
+    expect(call('PUT /courses/:id', { subject: 'Math', teacherId: teacher, studentClassId: class24 }, course).status).toBe(200);
+    expect(call('PUT /courses/:id', { subject: 'Math', teacherId: bob, studentClassId: class24 }, 'nope').status).toBe(404);
+  });
+});

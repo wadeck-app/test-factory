@@ -113,23 +113,45 @@ export function storeLookups(store: Store): Lookups {
   };
 }
 
-// Returns the first conflict that `course` (an edited version of a stored course) would cause to its own schedule entries.
-export function findCourseConflict(store: Store, course: CourseRef): string | undefined {
+type Edit = Partial<{ course: CourseRef; classroom: ClassroomRef; studentClass: StudentClassRef }>;
+
+// Returns the first stored entry (in `slots` order) that `isAffected` selects and that would conflict once `edit`
+// (edited versions of stored records) is applied. The message names that entry, then the conflict.
+function findBrokenEntry(store: Store, edit: Edit, isAffected: (e: ScheduleEntry, lookups: Lookups) => boolean): string | undefined {
   const base = storeLookups(store);
-  const lookups: Lookups = { ...base, course: (id) => (id === course.id ? course : base.course(id)) };
+  const lookups: Lookups = {
+    course: (id) => (edit.course?.id === id ? edit.course : base.course(id)),
+    classroom: (id) => (edit.classroom?.id === id ? edit.classroom : base.classroom(id)),
+    studentClass: (id) => (edit.studentClass?.id === id ? edit.studentClass : base.studentClass(id)),
+  };
   const all = store.collection('slots').list() as unknown as ScheduleEntry[];
-  for (const entry of all.filter((e) => e.courseId === course.id)) {
+  for (const entry of all.filter((e) => isAffected(e, base))) {
     const conflict = findConflict(
       all.filter((e) => e.id !== entry.id),
       entry,
       lookups,
     );
     if (conflict) {
-      return conflict;
+      return `schedule entry ${entry.id} (${entry.day} ${entry.slot}) would break: ${conflict}`;
     }
   }
   return undefined;
 }
+
+// Returns the first conflict that `course` (an edited version of a stored course) would cause to its own schedule entries.
+export const findCourseConflict = (store: Store, course: CourseRef): string | undefined =>
+  findBrokenEntry(store, { course }, (e) => e.courseId === course.id);
+
+// Same for an edited classroom (its capacity) and an edited student class (its student count).
+export const findClassroomConflict = (store: Store, classroom: ClassroomRef): string | undefined =>
+  findBrokenEntry(store, { classroom }, (e) => e.classroomId === classroom.id);
+
+export const findStudentClassConflict = (store: Store, studentClass: StudentClassRef): string | undefined =>
+  findBrokenEntry(
+    store,
+    { studentClass },
+    (e, lookups) => lookups.course(e.courseId)?.studentClassId === studentClass.id,
+  );
 
 const entriesWhere = (store: Store, key: 'courseId' | 'classroomId', id: string): number =>
   (store.collection('slots').list() as unknown as ScheduleEntry[]).filter((e) => e[key] === id).length;
