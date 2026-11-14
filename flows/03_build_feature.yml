@@ -1,0 +1,96 @@
+# Build flow for a feature task. Manual run (v1, no dispatcher, no push):
+#   flow run flows/03_build_feature.yml -i taskId=<id> --wait
+#
+#   sync       host   sanitize the slot's .git, fetch, create branch <taskId>-<slug> from origin/integration
+#   fetch_task host   task text for the model
+#   implement  VM     model step (no git rights: tools deny + sandbox without git credentials)
+#   commit     host   sanitize .git again, commit on the branch (the model never commits)
+#
+# FACTORY_DIR is hardcoded for the single test project (see .claude/plans/2026-11-14_factory-architecture.md).
+
+id: build_feature
+version: '0.1.3'
+name: 'Build a feature'
+description: 'Sync a pool slot on integration, implement the task with a sandboxed model, commit on the task branch'
+
+requires: [sandbox]
+
+workspace: { provider: pool, dir: C:/Workspace_Tooling, prefix: _test-factory_wt, count: 4 }
+
+inputs:
+  taskId: text
+
+steps:
+  - id: sync
+    name: 'Sync the slot on origin/integration and create the task branch'
+    type: script
+    host: true
+    captureOutput: stdout
+    env:
+      TASK_ID: ${{ inputs.taskId }}
+    script: |
+      set -euo pipefail
+      FACTORY_DIR=C:/Workspace_Tooling/_test-factory
+      bash "$FACTORY_DIR/flows/lib/sanitize-git.sh" https://github.com/wadeck-app/test-factory
+      branch=$(task show "$TASK_ID" -p test-factory --json | node "$FACTORY_DIR/flows/lib/branch-name.mjs")
+      git fetch -q origin
+      git checkout -q -f -B "$branch" origin/integration
+      git clean -fdq
+      echo "$branch"
+
+  - id: fetch_task
+    name: 'Fetch the task text'
+    type: script
+    host: true
+    captureOutput: stdout
+    depends: [sync]
+    env:
+      TASK_ID: ${{ inputs.taskId }}
+    script: |
+      set -euo pipefail
+      task show "$TASK_ID" -p test-factory
+
+  - id: implement
+    name: 'Implement the task'
+    type: model
+    model: sonnet
+    depends: [fetch_task]
+    tools: [read, write, edit, glob, grep, bash]
+    # No interactive approval in a headless sandbox run: the VM and the git deny hooks are the guardrails.
+    skipPermissions: true
+    # Defense in depth: the sandbox has no git credentials and the commit is a host step.
+    toolHooks:
+      - timing: before
+        action: { type: deny, reason: 'git commit/push are done by the flow, never by the model', toolPattern: '*', argsContains: 'git commit' }
+      - timing: before
+        action: { type: deny, reason: 'git commit/push are done by the flow, never by the model', toolPattern: '*', argsContains: 'git push' }
+    prompt: |
+      You work in a git clone (your working directory) of the repository "test-factory", already on the task branch.
+      Implement the task below. Rules:
+      - Only edit files under packages/. Follow the existing layout of packages/app-module-school (app-core app-module: views are YAML in src/dsl-views, backend in src/backend/index.ts).
+      - No dependencies are installed, so you cannot run the tests or the compiler: reason carefully and keep the change small.
+      - Never run git commit, git push, git checkout or git reset: the flow commits for you.
+      - Finish with a short summary of what you changed.
+
+      The task (JSON of the task tracker, follow its description literally):
+      ${{ steps.fetch_task.outputs.stdout }}
+
+  - id: commit
+    name: 'Commit the change on the task branch'
+    type: script
+    host: true
+    depends: [implement]
+    env:
+      TASK_ID: ${{ inputs.taskId }}
+    script: |
+      set -euo pipefail
+      FACTORY_DIR=C:/Workspace_Tooling/_test-factory
+      bash "$FACTORY_DIR/flows/lib/sanitize-git.sh" https://github.com/wadeck-app/test-factory
+      BRANCH=$(git rev-parse --abbrev-ref HEAD)
+      git add -A
+      if git diff --cached --quiet; then
+        echo "commit: the model changed nothing on branch $BRANCH" >&2
+        exit 1
+      fi
+      git -c user.name="test-factory-builder" -c user.email="builder@test-factory.invalid" commit -q -m "feat($TASK_ID): $(task show "$TASK_ID" -p test-factory --json | node "$FACTORY_DIR/flows/lib/branch-name.mjs")"
+      git log --oneline -1

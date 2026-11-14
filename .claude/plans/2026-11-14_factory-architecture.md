@@ -40,6 +40,20 @@ Parked: tickets with nothing to implement (question, audit). Only build for now.
 | queue `cli` subscriber has no concurrency lock | queue-owner | dispatcher holds its own lock |
 | sbx worker source (`sandbox.exec`) | flow-sbx | not declared on this machine |
 
+## Sandbox facts (from flow-sbx, measured live unless marked)
+
+| Topic | Fact |
+|---|---|
+| Plugin | Built copy at `C:\Workspace_Tooling\_test-factory_plugin\dist-plugin` (source clone `agent-fleet-sbx`). Declare with `flow worker source add <id> --provider sandbox --plugin sandbox.exec --plugins-dir <that dir> --option projects=b3675f3d --option region=<r> --option profiles=claude=<host AWS profile> --option image=flow-sandbox:m8 --option pull=never`, then restart the daemon. |
+| Auth | Bedrock only, via a host AWS profile with a valid SSO session. Profile name not yet confirmed by the user. |
+| Image | `flow-sandbox:m8` has Node 24, npm 11, git 2.53. `m6` has Node 22 (too old). |
+| Git in the VM | `git commit` needs `-c user.name=... -c user.email=...`. No credentials in the VM: push is a `host: true` step. |
+| Dependencies | `npm.pkg.github.com` is reachable from the VM. Token only as a step `secrets:` env var on one script step, passed to npm by env, never written to disk (a later model step with a shell could read it). |
+| Parallelism | One source = one sandbox at a time. N parallel runs need N sources (same plugin dir), targeted with `--labels` and step `labels:`. Labels with requirement-only sources: untested. |
+| Capacity | `maxConcurrentSandboxes` default 4, over it the step fails (no queue). About 1.1-1.7 GiB RAM per sandbox. Start with one builder. |
+| Read-only | `profile: inspect` refuses `host: true`. Clones of the read-only pool are synced by a separate host script. |
+| MCP step | A model step calling `provideSteps` needs `skipPermissions: true`. |
+
 ## Build order
 
 1. Repo skeleton (monorepo, `.violations`, Node 24), branches `main`/`integration`, 4 clones.
