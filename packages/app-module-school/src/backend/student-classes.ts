@@ -1,5 +1,6 @@
 import type { ModuleContext } from '@wadeck-app/app-core-sdk';
 import { isStudentClassUsed } from './courses';
+import { findStudentClassConflict } from './schedule';
 import type { CollectionStore, Store } from './store';
 
 export interface StudentClass {
@@ -47,11 +48,23 @@ export function registerStudentClassRoutes(ctx: ModuleContext, store: Store): vo
     if (!result.ok) {
       return reply.code(400).send({ message: result.message });
     }
-    const updated = studentClasses().update(req.params.id, result.value);
-    if (!updated) {
+    const current = studentClasses().get(req.params.id) as unknown as StudentClass | undefined;
+    if (!current) {
       return reply.code(404).send({ message: 'student class not found' });
     }
-    return reply.send(updated);
+    // only a bigger class can break the schedule
+    const conflict =
+      result.value.studentCount > current.studentCount
+        ? findStudentClassConflict(store, {
+            id: current.id,
+            name: result.value.name,
+            studentCount: result.value.studentCount,
+          })
+        : undefined;
+    if (conflict) {
+      return reply.code(409).send({ message: conflict });
+    }
+    return reply.send(studentClasses().update(req.params.id, result.value));
   });
 
   ctx.registerRoute('DELETE', '/student-classes/:id', (req, reply) => {

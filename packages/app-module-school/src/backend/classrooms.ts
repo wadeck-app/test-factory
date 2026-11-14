@@ -1,5 +1,5 @@
 import type { ModuleContext } from '@wadeck-app/app-core-sdk';
-import { countScheduleEntriesForClassroom, usedByEntriesMessage } from './schedule';
+import { countScheduleEntriesForClassroom, findClassroomConflict, usedByEntriesMessage } from './schedule';
 import type { CollectionStore, Store } from './store';
 
 export interface Classroom {
@@ -50,11 +50,19 @@ export function registerClassroomRoutes(ctx: ModuleContext, store: Store): void 
     if (!result.ok) {
       return reply.code(400).send({ message: result.message });
     }
-    const updated = classrooms().update(req.params.id, result.value);
-    if (!updated) {
+    const current = classrooms().get(req.params.id) as unknown as Classroom | undefined;
+    if (!current) {
       return reply.code(404).send({ message: 'classroom not found' });
     }
-    return reply.send(updated);
+    // only a smaller capacity can break the schedule
+    const conflict =
+      result.value.capacity < current.capacity
+        ? findClassroomConflict(store, { id: current.id, name: result.value.name, capacity: result.value.capacity })
+        : undefined;
+    if (conflict) {
+      return reply.code(409).send({ message: conflict });
+    }
+    return reply.send(classrooms().update(req.params.id, result.value));
   });
 
   ctx.registerRoute('DELETE', '/classrooms/:id', (req, reply) => {

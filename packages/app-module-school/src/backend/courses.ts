@@ -106,18 +106,23 @@ export function registerCourseRoutes(ctx: ModuleContext, store: Store): void {
     if (!result.ok) {
       return reply.code(400).send({ message: result.message });
     }
-    if (!courses().get(req.params.id)) {
+    const current = courses().get(req.params.id);
+    if (!current) {
       return reply.code(404).send({ message: 'course not found' });
     }
     const refusal = checkReferences(store, result.value);
     if (refusal) {
       return reply.code(refusal.status).send({ message: refusal.message });
     }
-    const conflict = findCourseConflict(store, {
-      id: req.params.id,
-      teacherId: result.value.teacherId,
-      studentClassId: result.value.studentClassId,
-    });
+    // only another teacher or class can break the schedule
+    const changed = current.teacherId !== result.value.teacherId || current.studentClassId !== result.value.studentClassId;
+    const conflict = changed
+      ? findCourseConflict(store, {
+          id: req.params.id,
+          teacherId: result.value.teacherId,
+          studentClassId: result.value.studentClassId,
+        })
+      : undefined;
     if (conflict) {
       return reply.code(409).send({ message: conflict });
     }
