@@ -3,13 +3,10 @@
 # Queue has no concurrency lock between two events of a cli subscriber: the mutual exclusion lives in dispatch.mjs.
 # Only plain text on the command line (the queue refuses double quotes in arguments).
 #
-# ACTIVE since 2026-11-14 for the analyst roles only (triage, plan), added with `queue sub add`:
+# ACTIVE since 2026-11-14 for all roles (triage, plan, build, integrate), added with `queue sub add`:
 #   global  (~/.config/queue/subscribers.yml)                  flow.execution.completed / flow.execution.failed  when payload.projectId=b3675f3d
 #   project (<registry>/projects/b3675f3d/queue/config/...)    onTaskCreated, onStatusChange when payload.newStatus=backlog
 # Remove them with: queue sub remove <event> --name <name>   (test-factory-completed, test-factory-failed, test-factory-created, test-factory-backlog)
-#
-# NOT ACTIVE (needs the npm token file, otherwise every event would start a build that cannot run): the build and integrate roles.
-# Activate by dropping `--roles triage,plan` from the commands below.
 #
 # Do not set QUEUE_SDK_OFF=1 in a shell that starts the flow daemon: the daemon inherits it and its events never reach the queue
 # (the daemon stops when idle, the next `flow run` restarts it with the environment of that shell).
@@ -18,24 +15,24 @@ subscribers:
   flow.execution.completed:
     - type: cli
       name: test-factory-completed
-      command: node C:/Workspace_Tooling/_test-factory/flows/lib/on-flow-event.mjs {{ payload.executionId }} --roles triage,plan
+      command: node C:/Workspace_Tooling/_test-factory/flows/lib/on-flow-event.mjs {{ payload.executionId }}
       when: payload.projectId=b3675f3d
       timeout: 5m
   flow.execution.failed:
     - type: cli
       name: test-factory-failed
-      command: node C:/Workspace_Tooling/_test-factory/flows/lib/on-flow-event.mjs {{ payload.executionId }} --roles triage,plan
+      command: node C:/Workspace_Tooling/_test-factory/flows/lib/on-flow-event.mjs {{ payload.executionId }}
       when: payload.projectId=b3675f3d
       timeout: 5m
   onTaskCreated:
     - type: cli
       name: test-factory-created
-      command: node C:/Workspace_Tooling/_test-factory/flows/lib/dispatch.mjs --roles triage,plan
+      command: node C:/Workspace_Tooling/_test-factory/flows/lib/dispatch.mjs
       timeout: 5m
   onStatusChange:
     - type: cli
       name: test-factory-backlog
-      command: node C:/Workspace_Tooling/_test-factory/flows/lib/dispatch.mjs --roles triage,plan
+      command: node C:/Workspace_Tooling/_test-factory/flows/lib/dispatch.mjs
       when: payload.newStatus=backlog
       timeout: 5m
 
