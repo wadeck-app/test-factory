@@ -6,15 +6,14 @@ import type { Classroom, ClassroomInput } from './types';
 
 export type { Classroom, ClassroomInput };
 
-// `capacity` must be a positive integer; a numeric string (as sent by the form) is accepted.
+// `capacity` must be a positive integer (strictly a number, like `studentCount` of a student class).
 // `building` is optional and defaults to an empty string.
 export function validateClassroom(body: unknown): Validation<ClassroomInput> {
   const data = bodyAsObject(body);
   if (typeof data.name !== 'string' || data.name.trim() === '') {
     return { ok: false, message: 'name is required' };
   }
-  const capacity =
-    typeof data.capacity === 'string' && /^\s*\d+\s*$/.test(data.capacity) ? Number(data.capacity) : data.capacity;
+  const { capacity } = data;
   if (typeof capacity !== 'number' || !Number.isInteger(capacity) || capacity <= 0) {
     return { ok: false, message: 'capacity must be a positive integer' };
   }
