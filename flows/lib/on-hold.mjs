@@ -13,7 +13,8 @@ import path from 'node:path';
 
 const FLOWS = ['build_feature', 'integrate', 'triage', 'plan'];
 const SLOTS = ['_test-factory_wt1', '_test-factory_wt2', '_test-factory_wt3', '_test-factory_wt4'];
-const POOL_DIRECTORY = 'C:/Workspace_Tooling';
+// The clones are siblings of the project folder (pool dir of the flows).
+const POOL_DIRECTORY = path.dirname(projectDirectory).replaceAll(path.sep, '/');
 
 const args = process.argv.slice(2);
 const dryRun = args.includes('--dry-run');

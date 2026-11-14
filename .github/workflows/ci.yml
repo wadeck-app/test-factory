@@ -34,6 +34,9 @@ jobs:
             - name: Test
               run: npm test
 
+            - name: Syntax of the factory scripts
+              run: npm run check:scripts
+
             - name: Violations
               run: npm run violations
 
