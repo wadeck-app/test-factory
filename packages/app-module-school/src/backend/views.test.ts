@@ -40,3 +40,18 @@ describe('courses page', () => {
     expect(view.match(/bind: subject, label: Subject, options: \$sources\.subjectOptions/g)).toHaveLength(2);
   });
 });
+
+describe('home page and id columns', () => {
+  it('shows no skeleton text on the home page', () => {
+    const page = read('src/dsl-views/page.yaml');
+    expect(page).not.toContain('ping');
+    expect(page).not.toContain('Badge');
+    expect(page).toContain('$sources.summary.classrooms');
+  });
+
+  it.each(['classrooms', 'student-classes'])('shows no id column in %s', (name) => {
+    const view = read(`src/dsl-views/${name}.yaml`);
+    expect(view).not.toMatch(/field: id\b/);
+    expect(view).toContain('{id}');
+  });
+});

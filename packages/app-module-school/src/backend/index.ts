@@ -11,7 +11,6 @@ import { registerTeacherRoutes } from './teachers';
 
 export default function register(moduleCtx: ModuleContext): void {
   const ctx = withCorruptStoreAnswer(moduleCtx);
-  ctx.registerRoute('GET', '/ping', (_req, reply) => reply.send({ message: 'hello from school' }));
   const store = createStore(ctx.dataDir);
   seedIfEmpty(store);
   registerTeacherRoutes(ctx, store);

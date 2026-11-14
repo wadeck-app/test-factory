@@ -1,13 +1,9 @@
 $sources:
-  ping:
-    url: GET /api/modules/school/ping
   summary:
     url: GET /api/modules/school/summary
 
 $type: VerticalStack
 items:
-  - $type: Badge
-    label: $sources.ping.message
   - $type: HorizontalStack
     items:
       - { $type: StatTile, label: Classrooms, value: $sources.summary.classrooms }

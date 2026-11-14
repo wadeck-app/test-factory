@@ -8,7 +8,6 @@ import { SAMPLE_CLASSROOMS, SAMPLE_COURSES, SAMPLE_SLOTS, SAMPLE_STUDENT_CLASSES
 import { SEEDED_MARKER, SEEDING_MARKER } from './store';
 
 const LIST_ROUTES = [
-  'GET /ping',
   'GET /teachers',
   'GET /classrooms',
   'GET /student-classes',
@@ -53,7 +52,6 @@ describe('module startup', () => {
       teachers: SAMPLE_TEACHERS.length,
       courses: SAMPLE_COURSES.length,
     });
-    expect(call('GET /ping').payload).toEqual({ message: 'hello from school' });
     expect(existsSync(join(dir, SEEDED_MARKER))).toBe(true);
     expect(existsSync(join(dir, SEEDING_MARKER))).toBe(false);
   });

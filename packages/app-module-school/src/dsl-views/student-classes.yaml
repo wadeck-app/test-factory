@@ -27,7 +27,6 @@ items:
     emptyMessage: No student class yet
     onAction: $ctx.onAction
     columns:
-      - { field: id, label: Id }
       - { field: name, label: Name }
       - { field: level, label: Level }
       - { field: studentCount, label: Students }
