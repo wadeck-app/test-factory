@@ -1,8 +1,12 @@
 $sources:
   grid:
-    url: GET /api/modules/school/schedule-grid
+    url: GET /api/modules/school/schedule-grid?studentClassId={studentClassId}
+    dependsOn: studentClassId
   entries:
-    url: GET /api/modules/school/schedule-entries
+    url: GET /api/modules/school/schedule-entries?studentClassId={studentClassId}
+    dependsOn: studentClassId
+  studentClassOptions:
+    url: GET /api/modules/school/schedule-class-options
   courseOptions:
     url: GET /api/modules/school/course-options
   classroomOptions:
@@ -32,6 +36,9 @@ $actions:
 
 $type: VerticalStack
 items:
+  - $type: Form
+    fields:
+      - { $type: FieldSelect, bind: studentClassId, label: Student class, options: $sources.studentClassOptions }
   - $type: DataTable
     rows: $sources.grid
     emptyMessage: No slot

@@ -211,6 +211,34 @@ describe('schedule routes', () => {
     expect(call('GET /slot-options').payload).toHaveLength(4);
   });
 
+  it('filters the grid and the entries by student class', () => {
+    call('POST /schedule', entry(courseA, room, 'tue', '09:00-10:00'));
+    call('POST /schedule', entry(courseD, room2, 'tue', '09:00-10:00'));
+    const classes = call('GET /schedule-class-options').payload as { value: string; label: string }[];
+    expect(classes[0]).toEqual({ value: '', label: 'All classes' });
+    const k6a = classes.find((c) => c.label === '6A')!.value;
+
+    const grid = call('GET /schedule-grid', undefined, undefined, { studentClassId: k6a }).payload as Record<string, string>[];
+    expect(grid.map((r) => r.slot)).toHaveLength(4);
+    expect(grid[1].tue).toBe('Math / Ada / 6A / R1');
+    const list = call('GET /schedule-entries', undefined, undefined, { studentClassId: k6a }).payload as { label: string }[];
+    expect(list.map((e) => e.label)).toEqual(['Tue 09:00-10:00 - Math / Ada / 6A / R1']);
+
+    for (const query of [undefined, {}, { studentClassId: '' }] as (Record<string, string> | undefined)[]) {
+      const all = call('GET /schedule-grid', undefined, undefined, query).payload as Record<string, string>[];
+      expect(all[1].tue).toBe('Math / Ada / 6A / R1; Math / Bob / 6B / R2');
+      expect(call('GET /schedule-entries', undefined, undefined, query).payload).toHaveLength(2);
+    }
+  });
+
+  it('answers 404 for an unknown student class filter', () => {
+    for (const route of ['GET /schedule-grid', 'GET /schedule-entries']) {
+      const reply = call(route, undefined, undefined, { studentClassId: 'nope' });
+      expect(reply.status).toBe(404);
+      expect(messageOf(reply)).toBe('student class not found');
+    }
+  });
+
   it('refuses to delete a classroom used by schedule entries, then allows it', () => {
     const a = idOf(call('POST /schedule', entry(courseA, room)));
     const b = idOf(call('POST /schedule', entry(courseB, room, 'tue')));

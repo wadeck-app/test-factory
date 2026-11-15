@@ -1,7 +1,7 @@
 import type { ModuleContext } from '@wadeck-app/app-core-sdk';
 import { CONFLICT, NOT_FOUND, type Refusal, refuse } from './http';
 import { type Validation, badRequest, bodyAsObject, notFound, deleted, registerOptions } from './http';
-import { listClassrooms, listCourses } from './records';
+import { listClassrooms, listCourses, listStudentClasses } from './records';
 import type { CollectionStore, Store } from './store';
 
 export const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri'] as const;
@@ -217,10 +217,28 @@ export function registerScheduleRoutes(ctx: ModuleContext, store: Store): void {
     return `${d.subject} / ${d.teacher} / ${d.studentClass} / ${d.classroom}`;
   };
 
+  // Entries of the class named by the optional `studentClassId` query (all of them when absent or empty), or a refusal.
+  const entriesOfQuery = (query: unknown): ScheduleEntry[] | Refusal => {
+    const all = slots().list() as unknown as ScheduleEntry[];
+    const raw = (query as { studentClassId?: unknown } | undefined)?.studentClassId;
+    const classId = typeof raw === 'string' ? raw.trim() : '';
+    if (classId === '') {
+      return all;
+    }
+    if (!lookups.studentClass(classId)) {
+      return { status: NOT_FOUND, message: 'student class not found' };
+    }
+    return all.filter((e) => lookups.course(e.courseId)?.studentClassId === classId);
+  };
+  const isRefusal = (result: ScheduleEntry[] | Refusal): result is Refusal => !Array.isArray(result);
+
   // The week as a table: one row per slot (the fixed ones, then any other stored slot), one key per day.
-  ctx.registerRoute('GET', '/schedule-grid', (_req, reply) => {
-    const entries = slots().list() as unknown as ScheduleEntry[];
-    const labels = [...new Set([...SLOTS, ...entries.map((e) => e.slot)])].sort();
+  ctx.registerRoute('GET', '/schedule-grid', (req, reply) => {
+    const entries = entriesOfQuery(req.query);
+    if (isRefusal(entries)) {
+      return refuse(reply, entries);
+    }
+    const labels = [...new Set([...SLOTS, ...(slots().list() as unknown as ScheduleEntry[]).map((e) => e.slot)])].sort();
     return reply.send(
       labels.map((slot) => {
         const row: Record<string, string> = { slot };
@@ -236,14 +254,13 @@ export function registerScheduleRoutes(ctx: ModuleContext, store: Store): void {
   });
 
   // Flat list of entries, with a label, to delete them.
-  ctx.registerRoute('GET', '/schedule-entries', (_req, reply) =>
-    reply.send(
-      (slots().list() as unknown as ScheduleEntry[]).map((e) => ({
-        ...e,
-        label: `${DAY_LABELS[e.day]} ${e.slot} - ${summary(e)}`,
-      })),
-    ),
-  );
+  ctx.registerRoute('GET', '/schedule-entries', (req, reply) => {
+    const entries = entriesOfQuery(req.query);
+    if (isRefusal(entries)) {
+      return refuse(reply, entries);
+    }
+    return reply.send(entries.map((e) => ({ ...e, label: `${DAY_LABELS[e.day]} ${e.slot} - ${summary(e)}` })));
+  });
 
   // `{ value, label }` lists for the selects of the form.
   registerOptions(ctx, '/course-options', () =>
@@ -253,6 +270,11 @@ export function registerScheduleRoutes(ctx: ModuleContext, store: Store): void {
     })),
   );
   registerOptions(ctx, '/classroom-options', () => listClassrooms(store).map((c) => ({ value: c.id, label: c.name })));
+  // Filter of the page: "All classes" (empty value) first, then every student class.
+  registerOptions(ctx, '/schedule-class-options', () => [
+    { value: '', label: 'All classes' },
+    ...listStudentClasses(store).map((k) => ({ value: k.id, label: k.name })),
+  ]);
   registerOptions(ctx, '/day-options', () => DAY_OPTIONS);
   registerOptions(ctx, '/slot-options', () => SLOT_OPTIONS);
 

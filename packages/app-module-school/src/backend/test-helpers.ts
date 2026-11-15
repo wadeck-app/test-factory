@@ -4,7 +4,7 @@ import type { ModuleContext } from '@wadeck-app/app-core-sdk';
 import register from './index';
 import { SEEDED_MARKER } from './store';
 
-export type Handler = (req: { body?: unknown; params: Record<string, string> }, reply: FakeReply) => unknown;
+export type Handler = (req: { body?: unknown; params: Record<string, string>; query?: Record<string, string> }, reply: FakeReply) => unknown;
 
 export class FakeReply {
   status = 200;
@@ -33,15 +33,16 @@ export function fakeContext(dataDir?: string) {
 }
 
 // Calls a recorded route with the given params and body.
-export function invoke(routes: Map<string, Handler>, route: string, params: Record<string, string> = {}, body?: unknown) {
+export function invoke(routes: Map<string, Handler>, route: string, params: Record<string, string> = {}, body?: unknown, query?: Record<string, string>) {
   const reply = new FakeReply();
-  routes.get(route)!({ body, params }, reply);
+  routes.get(route)!({ body, params, query }, reply);
   return reply;
 }
 
 // Returns `call(route, body?, id?)` over the recorded routes.
 export function caller(routes: Map<string, Handler>) {
-  return (route: string, body?: unknown, id?: string) => invoke(routes, route, id ? { id } : {}, body);
+  return (route: string, body?: unknown, id?: string, query?: Record<string, string>) =>
+    invoke(routes, route, id ? { id } : {}, body, query);
 }
 
 // Starts the whole module from an empty data directory (seeded marker written, so no sample data).
