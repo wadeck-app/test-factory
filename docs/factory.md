@@ -43,13 +43,13 @@ Tasks (local `task` storage today) go through triage, plan, build, integration, 
 | Variable | Default | Meaning |
 |---|---|---|
 | `FACTORY_BUILDERS` | 1 | builds at once |
-| `FACTORY_ANALYSTS` | 1 | triage and plan at once |
-| `FACTORY_SANDBOXES` | 1 | runs of all roles together: one sandbox worker serves ONE run |
+| `FACTORY_ANALYSTS` | 3 | triage and plan at once (3 reader clones `_ro1..3`, `READER_CLONES` in `flows/lib/factory.mjs`) |
+| `FACTORY_SANDBOXES` | 3 | runs of all roles together (max workers of the sandbox source) |
 | `FACTORY_PROJECT` | `test-factory` | task and flow project |
 
 A dispatcher that finds the lock taken waits for it (3 minutes at most).
 
-Parallel analysts are NOT usable yet. Measured 2026-11-15 (flow 1089, source `sandbox-builder-1` declared with `--max-workers 3`): of 3 concurrent triage runs, 2 failed at their first step with "This worker already serves run"; only one worker was connected and the daemon created no second one. The handler sends such a task back (comment, claim released) and the clones `_test-factory_ro2` and `_ro3` are ready. To enable: the flow daemon must give each concurrent run its own worker, then set `count: 3` in `00_pm`, `01_triage`, `02_plan` (bump their versions), `READER_CLONES = 3` in `flows/lib/factory.mjs`, and `FACTORY_ANALYSTS=3 FACTORY_SANDBOXES=3`. Load of 3 started runs on this machine: CPU 26% at most, RAM 55 to 61% (one worker only was running, so this is not the load of 3 sandboxes).
+Parallel analysts are configured but NOT yet parallel. Measured 2026-11-15 (flow 1089, source `sandbox-builder-1` with `--max-workers 3`): with the sandbox plugin built before the `run-hold` change, 2 of 3 concurrent runs failed with "This worker already serves run"; with the rebuilt plugin (`wrapper.cjs` from `agent-fleet/packages/flow-sandbox`, copy it over the `--plugins-dir` copy and restart the daemon) nothing fails, but the daemon starts only ONE worker and the runs wait for it (15, 23, 30 s for a 15 s triage). flow-owner is fixing the scale-up (the daemon does not ask the source for another worker when one already meets `requires:`); retest with `flow worker list` during 3 concurrent runs. A run refused by a busy worker is sent back by the handler (comment, claim released). Load seen with one worker: CPU 26% at most, RAM 55 to 61%; the load of 3 simultaneous sandboxes is not measured yet. Reverse: see decision D10.
 
 ## Daily use
 
