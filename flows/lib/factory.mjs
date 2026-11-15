@@ -80,8 +80,10 @@ export function task(args, input) {
 	return runChecked('task', [...args, '-p', project], input);
 }
 
+// The GitHub strategy writes a comment as the user of the token and refuses `--author`: the role is named in the first line of the text,
+// which works for every strategy.
 export function comment(taskId, author, text) {
-	task(['comment', taskId, '--file', '-', '--author', author], text);
+	task(['comment', taskId, '--file', '-'], `[${author}] ${text}`);
 }
 
 // A task whose automatic work cannot continue goes on hold with a comment, never into a retry loop.

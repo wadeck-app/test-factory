@@ -16,7 +16,7 @@
 # A task sent back after a conflict is built again from its pushed branch: the build flows merge origin/integration into it and the model resolves the conflicts.
 
 id: integrate
-version: '0.4.0'
+version: '0.4.1'
 name: 'Integrate a task branch'
 description: 'Merge the task branch into integration without conflict, run the gates, push integration'
 
@@ -54,7 +54,7 @@ steps:
       if ! git -c user.name="test-factory-integrator" -c user.email="integrator@test-factory.invalid" merge --no-commit --no-ff "origin/$BRANCH" >&2; then
         CONFLICTS=$(git diff --name-only --diff-filter=U | tr '\n' ' ')
         git merge --abort || true
-        task comment "$TASK_ID" -p test-factory --author test-factory-integrator "Integration refused: merging $BRANCH into integration conflicts in: $CONFLICTS. Update the branch from integration and resolve the conflicts, then it will be integrated again." >&2
+        task comment "$TASK_ID" -p test-factory "[test-factory-integrator] Integration refused: merging $BRANCH into integration conflicts in: $CONFLICTS. Update the branch from integration and resolve the conflicts, then it will be integrated again." >&2
         task set-status "$TASK_ID" planned -p test-factory >&2
         echo "prepare: merge conflict in: $CONFLICTS (task $TASK_ID commented and sent back to planned)" >&2
         exit 3
@@ -109,7 +109,7 @@ steps:
       # Plain push, never forced: a concurrent push to integration makes it fail loudly, rerun the flow.
       git push origin HEAD:refs/heads/integration
       task set-status "$TASK_ID" integrated -p test-factory
-      task comment "$TASK_ID" -p test-factory --author test-factory-integrator "Integrated: $BRANCH merged into integration ($(git rev-parse --short HEAD)), gates passed."
+      task comment "$TASK_ID" -p test-factory "[test-factory-integrator] Integrated: $BRANCH merged into integration ($(git rev-parse --short HEAD)), gates passed."
       git log --oneline -1
 
   # The CI of the pushed commit must pass before anything is deployed: the push of integration starts it, `queue wait ci` waits for it.
