@@ -25,7 +25,11 @@ Code repo: `wadeck-app/test-factory` (public, empty remote). Issues repo: `wadec
 | `01_triage` | classify type, set priority default | read-only analyst |
 | `02_plan` | plan, comment on the task | read-only analyst |
 | `03_build_<type>` | `bug`, `enhancement`, `feature`; branch sync, model step, test/violations gates | pool slot, sbx |
-| `04_integrate` | gates, commit/push branch, merge into `integration` without conflict, tests, push; conflict = comment + task back to `in-progress` | integrator, pool of 1 |
+| `00_pm` | split a goal into dependent tasks (`npm run pm`) | read-only analyst |
+| `04_integrate` | merge the pushed branch into `integration` without conflict (conflict = comment + task back to `planned`), gates, push, wait for the CI of the pushed commit, package, deploy to the app-core of the HOST, smoke test | integrator, pool of 1 |
+| `05_deploy` | manual redeploy of a validated commit | integrator, pool of 1 |
+
+Current operation and troubleshooting: `docs/factory.md` (single source for what exists today; this plan keeps the decisions).
 
 Parked: tickets with nothing to implement (question, audit). Only build for now.
 
@@ -33,12 +37,12 @@ Parked: tickets with nothing to implement (question, audit). Only build for now.
 
 | Item | Owner | Status |
 |---|---|---|
-| Priority, list sort/filter, claim, `--fresh` | task-owner | designed, waiting for user go |
-| Queue relay for the issues repo (webhook, token, scopes) | unknown (hosted outside the queue repo) | asked the user |
-| Read-only (`inspect`) mode for analysts | flow-sbx | to confirm |
+| Priority, list sort/filter, claim, `--fresh` | task-owner | implemented, in use |
+| Queue relay for the issues repo (webhook, token, scopes) | unknown (hosted outside the queue repo) | GitHub events of both repositories arrive; the `on.github.issues` event is not yet seen (no issue created there) |
+| Read-only (`inspect`) mode for analysts | flow-sbx | in use (triage, plan, PM) |
 | Flow cannot bind a run to a task (`task.*` empty); use `-i taskId` | flow-owner | accepted |
 | queue `cli` subscriber has no concurrency lock | queue-owner | dispatcher holds its own lock |
-| sbx worker source (`sandbox.exec`) | flow-sbx | not declared on this machine |
+| sbx worker source (`sandbox.exec`) | flow-sbx | declared: `sandbox-builder-1`, max=1 |
 
 ## Sandbox facts (from flow-sbx, measured live unless marked)
 
@@ -48,8 +52,8 @@ Parked: tickets with nothing to implement (question, audit). Only build for now.
 | Auth | Bedrock only, via a host AWS profile with a valid SSO session. Profile name not yet confirmed by the user. |
 | Image | `flow-sandbox:m8` has Node 24, npm 11, git 2.53. `m6` has Node 22 (too old). |
 | Git in the VM | `git commit` needs `-c user.name=... -c user.email=...`. No credentials in the VM: push is a `host: true` step. |
-| Dependencies | `npm.pkg.github.com` is reachable from the VM. Token only as a step `secrets:` env var on one script step, passed to npm by env, never written to disk (a later model step with a shell could read it). |
-| Parallelism | One source = one sandbox at a time. N parallel runs need N sources (same plugin dir), targeted with `--labels` and step `labels:`. Labels with requirement-only sources: untested. |
+| Dependencies | DECIDED 2026-11-14: installed on the HOST before any model or VM code (`npm ci --ignore-scripts --os=linux --cpu=x64 --libc=glibc`, host registry access): no token in the VM nor in flow inputs. Verified: build, test, violations and check pass in the VM on those node_modules. |
+| Parallelism | One source (`max=1`) = one run at a time, and the dispatcher caps all roles together (`FACTORY_SANDBOXES`). A second run fails at its first VM step (measured). flow-owner: the daemon hands a worker held by run A to run B (first registered idle worker preferred); the affinity fix is published in flow 1088 (unit tests only, no live test yet); labels are a hard step filter, so one source per slot with `labels: [analyst-N]` is the deterministic alternative (not tested). |
 | Capacity | `maxConcurrentSandboxes` default 4, over it the step fails (no queue). About 1.1-1.7 GiB RAM per sandbox. Start with one builder. |
 | Read-only | `profile: inspect` refuses `host: true`. Clones of the read-only pool are synced by a separate host script. |
 | MCP step | A model step calling `provideSteps` needs `skipPermissions: true`. |
