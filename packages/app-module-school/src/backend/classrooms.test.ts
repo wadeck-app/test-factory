@@ -30,6 +30,7 @@ describe('validateClassroom', () => {
 
   it.each([
     [{ capacity: 10 }],
+    [{ name: '', capacity: 10 }],
     [{ name: '  ', capacity: 10 }],
     [{ name: 'A1' }],
     [{ name: 'A1', capacity: 0 }],
@@ -92,6 +93,23 @@ describe('classroom routes', () => {
       expect(call('PUT /classrooms/:id', { name: 'B', capacity }, 'nope').status).toBe(400);
     }
     expect(call('GET /classrooms').payload).toEqual([{ id, name: 'A1', capacity: 30, building: '' }]);
+  });
+
+  it.each([[''], ['   ']])('refuses the empty or blank name %j naming the field, without changing data', (name) => {
+    const call = setup(dir);
+    const file = () => readFileSync(join(dir, 'classrooms.json'), 'utf8');
+    const { id } = call('POST /classrooms', { name: 'A1', capacity: 30 }).payload as { id: string };
+    const before = file();
+
+    const post = call('POST /classrooms', { name, capacity: 30 });
+    expect(post.status).toBe(400);
+    expect(post.payload).toMatchObject({ message: 'name is required' });
+
+    const put = call('PUT /classrooms/:id', { name, capacity: 30 }, id);
+    expect(put.status).toBe(400);
+    expect(put.payload).toMatchObject({ message: 'name is required' });
+
+    expect(file()).toBe(before);
   });
 
   it('answers 404 for an unknown id', () => {
