@@ -49,6 +49,8 @@ Tasks (local `task` storage today) go through triage, plan, build, integration, 
 
 A dispatcher that finds the lock taken waits for it (3 minutes at most).
 
+Parallel analysts are NOT usable yet. Measured 2026-11-15 (flow 1089, source `sandbox-builder-1` declared with `--max-workers 3`): of 3 concurrent triage runs, 2 failed at their first step with "This worker already serves run"; only one worker was connected and the daemon created no second one. The handler sends such a task back (comment, claim released) and the clones `_test-factory_ro2` and `_ro3` are ready. To enable: the flow daemon must give each concurrent run its own worker, then set `count: 3` in `00_pm`, `01_triage`, `02_plan` (bump their versions), `READER_CLONES = 3` in `flows/lib/factory.mjs`, and `FACTORY_ANALYSTS=3 FACTORY_SANDBOXES=3`. Load of 3 started runs on this machine: CPU 26% at most, RAM 55 to 61% (one worker only was running, so this is not the load of 3 sandboxes).
+
 ## Daily use
 
 - Create a task: `task new "<title>" --description-file - -p test-factory` (description on stdin; give the title and what to check).

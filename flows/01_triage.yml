@@ -7,7 +7,7 @@
 # on a Windows command line (cmd shim), free text with quotes or new lines would break it.
 
 id: triage
-version: '0.1.2'
+version: '0.1.4'
 name: 'Triage a task'
 description: 'Read-only analyst: type, priority and short summary of a new task'
 

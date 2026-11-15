@@ -5,7 +5,7 @@
 # profile: inspect = read-only clone, no `task` here (see 01_triage.yml). The goal arrives base64 encoded.
 
 id: pm
-version: '0.1.2'
+version: '0.1.3'
 name: 'Product manager'
 description: 'Read-only analyst: split a goal into independent, buildable tasks with their dependencies'
 

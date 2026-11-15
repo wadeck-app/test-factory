@@ -6,8 +6,8 @@
 //
 // Environment (all optional):
 //   FACTORY_BUILDERS        max build runs (feature, enhancement, bug) running or queued at once (default 1)
-//   FACTORY_ANALYSTS        max triage+plan runs running or queued at once (default 1: one read-only clone)
-//   FACTORY_SANDBOXES       max runs of all roles together = number of sandbox workers declared in flow (default 1)
+//   FACTORY_ANALYSTS        max triage+plan runs running or queued at once (default 1; more needs the analyst flows `count` and READER_CLONES raised)
+//   FACTORY_SANDBOXES       max runs of all roles together = sandbox workers that really serve distinct runs (default 1, see below)
 //   FACTORY_PROJECT         task/flow project name (default test-factory)
 import fs from 'node:fs';
 import path from 'node:path';
@@ -29,6 +29,8 @@ function capacityOf(variable, fallback) {
 }
 const builders = capacityOf('FACTORY_BUILDERS', 1);
 const analysts = capacityOf('FACTORY_ANALYSTS', 1);
+// Default 1 until the flow daemon gives each concurrent run its own sandbox worker: measured 2026-11-15 with flow 1089 and a source of
+// max 3 workers, a second concurrent run was routed to the only connected (busy) worker and failed at its first step.
 const sandboxes = capacityOf('FACTORY_SANDBOXES', 1);
 
 // Order matters: integrating a branch frees work, so it comes first. `pool` = the flows that compete for the same clones.

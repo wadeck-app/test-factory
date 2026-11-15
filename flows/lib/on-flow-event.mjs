@@ -103,6 +103,8 @@ clearActiveRun(taskId, executionId);
 const held = currentStatus(taskId) === 'on-hold';
 function setStatus(status) {
 	if (held) console.log(`on-flow-event: task ${taskId} is on hold, status left on-hold (the run wanted ${status}).`);
+	// `task set-status` refuses the status the task already has (a triage or a plan does not change the status when it starts).
+	else if (currentStatus(taskId) === status) console.log(`on-flow-event: task ${taskId} is already "${status}".`);
 	else task(['set-status', taskId, status]);
 }
 
