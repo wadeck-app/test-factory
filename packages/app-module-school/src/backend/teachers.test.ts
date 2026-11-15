@@ -91,6 +91,12 @@ describe('teacher routes', () => {
     expect(call('GET /teachers').payload).toEqual([{ id, name: 'Ada', subjects: ['Math'] }]);
   });
 
+  it.each([[''], ['   '], [undefined], [42]])('answers 400 for the name %j on an unknown id, before the 404', (name) => {
+    const reply = setup(dir)('PUT /teachers/:id', { name, subjects: ['Math'] }, 'nope');
+    expect(reply.status).toBe(400);
+    expect((reply.payload as { message: string }).message).toContain('name');
+  });
+
   it('answers 404 for an unknown id', () => {
     const call = setup(dir);
     expect(call('PUT /teachers/:id', { name: 'Bob', subjects: ['Art'] }, 'nope').status).toBe(404);
