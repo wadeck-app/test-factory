@@ -15,6 +15,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BUILD_FLOWS } from './kinds.mjs';
 import { activeRunOf, assertPlainId, clearActiveRun, comment, completeResponse, fail, parseJson, park, project, showExecution, task, taskIdOf } from './factory.mjs';
+import { expectedStatuses, hasNoWorker, isSandboxBusy, keepsPriority, startStatusOf } from './rules.mjs';
 
 const TYPES = ['feature', 'enhancement', 'bug', 'question', 'audit'];
 const PRIORITIES = ['urgent', 'high', 'medium', 'low'];
@@ -90,11 +91,10 @@ if (recorded !== undefined && recorded.executionId !== executionId) {
 }
 // A flow only concerns a task that is in the status it works on (or on hold, handled below). Any other status means the task moved on
 // (a later run, a human): an event replayed by the queue must not move it back or park it.
-const STATUSES_OF_FLOW = { triage: ['new', 'on-hold'], plan: ['backlog', 'on-hold'], integrate: ['integrating', 'integrated', 'planned', 'on-hold'] };
-const expectedStatuses = flowId.startsWith('build_') ? ['in-progress', 'on-hold'] : STATUSES_OF_FLOW[flowId];
+const expected = expectedStatuses(flowId);
 const statusNow = currentStatus(taskId);
-if (!expectedStatuses.includes(statusNow)) {
-	console.log(`on-flow-event: task ${taskId} is "${statusNow}", not in ${expectedStatuses.join('/')} where ${flowId} ${executionId} works: stale event ignored.`);
+if (!expected.includes(statusNow)) {
+	console.log(`on-flow-event: task ${taskId} is "${statusNow}", not in ${expected.join('/')} where ${flowId} ${executionId} works: stale event ignored.`);
 	process.exit(0);
 }
 clearActiveRun(taskId, executionId);
@@ -121,10 +121,8 @@ if (record.status === 'failed') {
 	}
 	// The sandbox worker serves one run at a time and refuses a second run at its first VM step. That is not a problem of the task: the
 	// task goes back to the status it started from and the dispatcher starts it again when a sandbox is free. Said loudly in a comment.
-	// The error text is on the failed step (the execution record has no error of its own).
-	if (Object.values(record.steps ?? {}).some((step) => /This worker already serves run/.test(String(step?.error ?? '')))) {
-		const START_STATUS = { triage: 'new', plan: 'backlog', integrate: 'integrating' };
-		const startStatus = flowId.startsWith('build_') ? 'planned' : START_STATUS[flowId];
+	if (isSandboxBusy(record)) {
+		const startStatus = startStatusOf(flowId);
 		act(`task ${taskId}: sandbox busy, back to ${startStatus}`, () => {
 			comment(taskId, worker, `The ${flowId} run ${executionId} could not start: the sandbox was busy with another run. The task goes back to "${startStatus}" and starts again by itself when a sandbox is free.`);
 			setStatus(startStatus);
@@ -144,8 +142,7 @@ if (record.status === 'failed') {
 		process.exit(0);
 	}
 	// No sandbox worker at all is an infrastructure problem, not a problem of the task: say where to look.
-	const noWorker = Object.values(record.steps ?? {}).some((step) => /no worker whose source guarantees/.test(String(step?.error ?? '')));
-	const infrastructureHint = noWorker
+	const infrastructureHint = hasNoWorker(record)
 		? ' No sandbox worker could start: check that the sandbox daemon runs ("sbx daemon status", start it with "sbx daemon start"), then "flow worker list" and the daemon log of the day under the flow config folder (logs/).'
 		: '';
 	act(`task ${taskId} on hold: ${flowId} execution ${executionId} failed`, () =>
@@ -194,9 +191,10 @@ if (flowId === 'triage') {
 		// An explicit priority (given by a human or by the PM) is not overwritten: `medium` is the project default, so it is the only value
 		// that means "nobody chose", and only then the triage proposal applies.
 		const currentPriority = currentStatusAndPriority(taskId).priority;
-		if (currentPriority === undefined || currentPriority === 'medium') task(['set-priority', taskId, verdict.priority]);
+		const kept = keepsPriority(currentPriority);
+		if (!kept) task(['set-priority', taskId, verdict.priority]);
 		else console.log(`on-flow-event: task ${taskId} keeps its priority "${currentPriority}" (the triage proposed "${verdict.priority}").`);
-		comment(taskId, worker, `Triage: type ${verdict.type}, proposed priority ${verdict.priority}${currentPriority === undefined || currentPriority === 'medium' ? '' : ` (kept: ${currentPriority}, chosen before the triage)`}.\n\nSummary: ${verdict.summary}\n\nReason: ${verdict.reason}`);
+		comment(taskId, worker, `Triage: type ${verdict.type}, proposed priority ${verdict.priority}${kept ? ` (kept: ${currentPriority}, chosen before the triage)` : ''}.\n\nSummary: ${verdict.summary}\n\nReason: ${verdict.reason}`);
 		if (PARKED_TYPES.includes(verdict.type)) {
 			comment(taskId, worker, `Parked: a ${verdict.type} has nothing to implement, the factory does not handle it yet. Answer it yourself, then close the task.`);
 			setStatus('on-hold');
