@@ -55,3 +55,15 @@ describe('home page and id columns', () => {
     expect(view).toContain('{id}');
   });
 });
+
+describe('schedule page', () => {
+  it('filters the grid and the entries by student class', () => {
+    const view = read('src/dsl-views/schedule.yaml');
+    expect(view).toContain('GET /api/modules/school/schedule-class-options');
+    expect(view).toContain('bind: studentClassId');
+    expect(view).toContain('schedule-grid?studentClassId={studentClassId}');
+    expect(view).toContain('schedule-entries?studentClassId={studentClassId}');
+    expect(view.match(/dependsOn: studentClassId/g)).toHaveLength(2);
+    expect(view.match(/reloadSources: \[grid, entries\]/g)).toHaveLength(3);
+  });
+});
