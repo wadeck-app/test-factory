@@ -8,7 +8,7 @@
 #   deploy   host   copy the package to .flow/deploy/<id>/<version> and register it in app-core (fails unless app-core confirms)
 
 id: deploy
-version: '0.2.0'
+version: '0.3.0'
 name: 'Deploy the integration app-module'
 description: 'Package the app-module of a commit of integration whose CI passed and register it in the running app-core'
 
@@ -66,3 +66,13 @@ steps:
     script: |
       set -euo pipefail
       node C:/Workspace_Tooling/_test-factory/flows/lib/deploy-module.mjs packages/app-module-school/dist-module school "$SHA"
+
+  - id: smoke
+    name: 'Smoke test of the deployed module'
+    type: script
+    host: true
+    depends: [deploy]
+    timeout: 120
+    script: |
+      set -euo pipefail
+      node C:/Workspace_Tooling/_test-factory/flows/lib/smoke-module.mjs school

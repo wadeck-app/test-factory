@@ -50,8 +50,12 @@ function release(taskId, worker) {
 	}
 }
 
+function currentStatusAndPriority(taskId) {
+	return parseJson(task(['show', taskId, '--json']), `task show ${taskId}`);
+}
+
 function currentStatus(taskId) {
-	return parseJson(task(['show', taskId, '--json']), `task show ${taskId}`).status;
+	return currentStatusAndPriority(taskId).status;
 }
 
 const record = showExecution(executionId);
@@ -182,8 +186,12 @@ if (flowId === 'triage') {
 	}
 	act(`task ${taskId}: type ${verdict.type}, priority ${verdict.priority}, comment, backlog`, () => {
 		task(['set-type', taskId, verdict.type]);
-		task(['set-priority', taskId, verdict.priority]);
-		comment(taskId, worker, `Triage: type ${verdict.type}, priority ${verdict.priority}.\n\nSummary: ${verdict.summary}\n\nReason: ${verdict.reason}`);
+		// An explicit priority (given by a human or by the PM) is not overwritten: `medium` is the project default, so it is the only value
+		// that means "nobody chose", and only then the triage proposal applies.
+		const currentPriority = currentStatusAndPriority(taskId).priority;
+		if (currentPriority === undefined || currentPriority === 'medium') task(['set-priority', taskId, verdict.priority]);
+		else console.log(`on-flow-event: task ${taskId} keeps its priority "${currentPriority}" (the triage proposed "${verdict.priority}").`);
+		comment(taskId, worker, `Triage: type ${verdict.type}, proposed priority ${verdict.priority}${currentPriority === undefined || currentPriority === 'medium' ? '' : ` (kept: ${currentPriority}, chosen before the triage)`}.\n\nSummary: ${verdict.summary}\n\nReason: ${verdict.reason}`);
 		if (PARKED_TYPES.includes(verdict.type)) {
 			comment(taskId, worker, `Parked: a ${verdict.type} has nothing to implement, the factory does not handle it yet. Answer it yourself, then close the task.`);
 			setStatus('on-hold');
