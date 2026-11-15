@@ -79,6 +79,18 @@ describe('teacher routes', () => {
     expect(call('GET /teachers').payload).toEqual([{ id, name: 'Ada', subjects: ['Math'] }]);
   });
 
+  it.each([[''], ['   '], ['\t']])('answers 400 naming the field for the name %j, on POST and PUT', (name) => {
+    const call = setup(dir);
+    const { id } = call('POST /teachers', { name: 'Ada', subjects: ['Math'] }).payload as { id: string };
+    const created = call('POST /teachers', { name, subjects: ['Math'] });
+    expect(created.status).toBe(400);
+    expect((created.payload as { message: string }).message).toContain('name');
+    const updated = call('PUT /teachers/:id', { name, subjects: ['Math'] }, id);
+    expect(updated.status).toBe(400);
+    expect((updated.payload as { message: string }).message).toContain('name');
+    expect(call('GET /teachers').payload).toEqual([{ id, name: 'Ada', subjects: ['Math'] }]);
+  });
+
   it('answers 404 for an unknown id', () => {
     const call = setup(dir);
     expect(call('PUT /teachers/:id', { name: 'Bob', subjects: ['Art'] }, 'nope').status).toBe(404);
