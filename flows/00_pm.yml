@@ -5,13 +5,13 @@
 # profile: inspect = read-only clone, no `task` here (see 01_triage.yml). The goal arrives base64 encoded.
 
 id: pm
-version: '0.1.3'
+version: '0.1.4'
 name: 'Product manager'
 description: 'Read-only analyst: split a goal into independent, buildable tasks with their dependencies'
 
 profile: inspect
 
-workspace: { provider: pool, dir: C:/Workspace_Tooling, prefix: _test-factory_ro, count: 1 }
+workspace: { provider: pool, dir: C:/Workspace_Tooling, prefix: _test-factory_ro, count: 3 }
 
 inputs:
   goalB64: text

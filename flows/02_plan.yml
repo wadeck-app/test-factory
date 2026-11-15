@@ -5,13 +5,13 @@
 # on the task and moves it to `planned` (or `on-hold` when the analyst needs a human decision).
 
 id: plan
-version: '0.1.5'
+version: '0.1.6'
 name: 'Plan a task'
 description: 'Read-only analyst: acceptance criteria, files to change and risks of a triaged task'
 
 profile: inspect
 
-workspace: { provider: pool, dir: C:/Workspace_Tooling, prefix: _test-factory_ro, count: 1 }
+workspace: { provider: pool, dir: C:/Workspace_Tooling, prefix: _test-factory_ro, count: 3 }
 
 inputs:
   taskId: text

@@ -28,10 +28,10 @@ function capacityOf(variable, fallback) {
 	return value;
 }
 const builders = capacityOf('FACTORY_BUILDERS', 1);
-const analysts = capacityOf('FACTORY_ANALYSTS', 1);
+const analysts = capacityOf('FACTORY_ANALYSTS', 3);
 // Default 1 until the flow daemon gives each concurrent run its own sandbox worker: measured 2026-11-15 with flow 1089 and a source of
 // max 3 workers, a second concurrent run was routed to the only connected (busy) worker and failed at its first step.
-const sandboxes = capacityOf('FACTORY_SANDBOXES', 1);
+const sandboxes = capacityOf('FACTORY_SANDBOXES', 3);
 
 // Order matters: integrating a branch frees work, so it comes first. `pool` = the flows that compete for the same clones.
 const roles = [

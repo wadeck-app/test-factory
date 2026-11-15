@@ -7,13 +7,13 @@
 # on a Windows command line (cmd shim), free text with quotes or new lines would break it.
 
 id: triage
-version: '0.1.4'
+version: '0.1.5'
 name: 'Triage a task'
 description: 'Read-only analyst: type, priority and short summary of a new task'
 
 profile: inspect
 
-workspace: { provider: pool, dir: C:/Workspace_Tooling, prefix: _test-factory_ro, count: 1 }
+workspace: { provider: pool, dir: C:/Workspace_Tooling, prefix: _test-factory_ro, count: 3 }
 
 inputs:
   taskId: text

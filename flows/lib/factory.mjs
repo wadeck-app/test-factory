@@ -70,7 +70,7 @@ export function completeResponse(record, stepId) {
 // (the `count` of their `workspace:`). They cannot update a clone themselves (profile inspect refuses host steps): call this before
 // starting one. The pool picks any free clone, so all of them are put on origin/integration. Throws an Error with the cause.
 // Keep it equal to the `count` of the analyst flows. Clones _ro2 and _ro3 already exist, ready for 3 parallel analysts (see docs/factory.md).
-export const READER_CLONES = 1;
+export const READER_CLONES = 3;
 export function syncReaderClone() {
 	const heads = [];
 	for (let index = 1; index <= READER_CLONES; index += 1) {
