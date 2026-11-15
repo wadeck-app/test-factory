@@ -86,7 +86,9 @@ describe('classroom routes', () => {
       const post = call('POST /classrooms', { name: 'B', capacity });
       expect(post.status).toBe(400);
       expect(post.payload).toMatchObject({ message: 'capacity must be a positive integer' });
-      expect(call('PUT /classrooms/:id', { name: 'B', capacity }, id).status).toBe(400);
+      const put = call('PUT /classrooms/:id', { name: 'B', capacity }, id);
+      expect(put.status).toBe(400);
+      expect(put.payload).toMatchObject({ message: 'capacity must be a positive integer' });
       expect(call('PUT /classrooms/:id', { name: 'B', capacity }, 'nope').status).toBe(400);
     }
     expect(call('GET /classrooms').payload).toEqual([{ id, name: 'A1', capacity: 30, building: '' }]);
