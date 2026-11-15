@@ -12,12 +12,14 @@
     "check": "npm run check --workspace=packages/app-module-school",
     "violations": "violations check",
     "check:scripts": "node scripts/check-scripts.mjs",
+    "test:scripts": "node --test \"flows/lib/*.test.mjs\"",
     "generate:flows": "node flows/lib/generate-build-flows.mjs",
     "pm": "node flows/lib/pm.mjs",
     "bundle": "npm run bundle --workspace=packages/app-module-school",
     "clean": "npm run clean --workspace=packages/app-module-school"
   },
   "devDependencies": {
+    "@types/node": "^24.19.2",
     "@wadeck-app/app-core-cli": "latest",
     "@wadeck-app/app-core-sdk": "latest",
     "@wadeck-app/violations-cli": "latest",

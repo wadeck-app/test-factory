@@ -15,6 +15,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BUILD_FLOWS } from './kinds.mjs';
 import { activeRunOf, assertPlainId, clearActiveRun, comment, completeResponse, fail, parseJson, park, project, showExecution, task, taskIdOf } from './factory.mjs';
+import { expectedStatuses, hasNoWorker, isSandboxBusy, keepsPriority, startStatusOf } from './rules.mjs';
 
 const TYPES = ['feature', 'enhancement', 'bug', 'question', 'audit'];
 const PRIORITIES = ['urgent', 'high', 'medium', 'low'];
@@ -50,8 +51,12 @@ function release(taskId, worker) {
 	}
 }
 
+function currentStatusAndPriority(taskId) {
+	return parseJson(task(['show', taskId, '--json']), `task show ${taskId}`);
+}
+
 function currentStatus(taskId) {
-	return parseJson(task(['show', taskId, '--json']), `task show ${taskId}`).status;
+	return currentStatusAndPriority(taskId).status;
 }
 
 const record = showExecution(executionId);
@@ -84,6 +89,14 @@ if (recorded !== undefined && recorded.executionId !== executionId) {
 	console.log(`on-flow-event: execution ${executionId} is not the current run of task ${taskId} (${recorded.executionId} is), stale event ignored.`);
 	process.exit(0);
 }
+// A flow only concerns a task that is in the status it works on (or on hold, handled below). Any other status means the task moved on
+// (a later run, a human): an event replayed by the queue must not move it back or park it.
+const expected = expectedStatuses(flowId);
+const statusNow = currentStatus(taskId);
+if (!expected.includes(statusNow)) {
+	console.log(`on-flow-event: task ${taskId} is "${statusNow}", not in ${expected.join('/')} where ${flowId} ${executionId} works: stale event ignored.`);
+	process.exit(0);
+}
 clearActiveRun(taskId, executionId);
 
 // A human hold always wins: a run that finishes after the hold publishes its result but never moves the task.
@@ -106,6 +119,18 @@ if (record.status === 'failed') {
 		console.log(`on-flow-event: integration of ${taskId} refused (conflict), task is planned again.`);
 		process.exit(0);
 	}
+	// The sandbox worker serves one run at a time and refuses a second run at its first VM step. That is not a problem of the task: the
+	// task goes back to the status it started from and the dispatcher starts it again when a sandbox is free. Said loudly in a comment.
+	if (isSandboxBusy(record)) {
+		const startStatus = startStatusOf(flowId);
+		act(`task ${taskId}: sandbox busy, back to ${startStatus}`, () => {
+			comment(taskId, worker, `The ${flowId} run ${executionId} could not start: the sandbox was busy with another run. The task goes back to "${startStatus}" and starts again by itself when a sandbox is free.`);
+			setStatus(startStatus);
+		});
+		release(taskId, worker);
+		console.error(`on-flow-event: ${flowId} ${executionId} refused by a busy sandbox, task ${taskId} back to ${startStatus} and retried by the dispatcher. The dispatcher should have prevented this run: check who started it.`);
+		process.exit(0);
+	}
 	if (flowId === 'integrate' && currentStatus(taskId) === 'integrated') {
 		// The merge is on integration: a later step failed (CI of the pushed commit, packaging, deployment). The task stays integrated
 		// (its code is there), but the humans are told loudly and the failing step is named in the run.
@@ -116,8 +141,12 @@ if (record.status === 'failed') {
 		console.error(`on-flow-event: integrate ${executionId} failed AFTER the merge of task ${taskId} (CI, packaging or deployment): nothing deployed, see flow show ${executionId} --io.`);
 		process.exit(0);
 	}
+	// No sandbox worker at all is an infrastructure problem, not a problem of the task: say where to look.
+	const infrastructureHint = hasNoWorker(record)
+		? ' No sandbox worker could start: check that the sandbox daemon runs ("sbx daemon status", start it with "sbx daemon start"), then "flow worker list" and the daemon log of the day under the flow config folder (logs/).'
+		: '';
 	act(`task ${taskId} on hold: ${flowId} execution ${executionId} failed`, () =>
-		park(taskId, worker, `the ${flowId} run ${executionId} failed. Read it with: flow show ${executionId} --io. Put the task back to its previous status when fixed.`),
+		park(taskId, worker, `the ${flowId} run ${executionId} failed. Read it with: flow show ${executionId} --io.${infrastructureHint} Put the task back to its previous status when fixed.`),
 	);
 	release(taskId, worker);
 	console.log(`on-flow-event: ${flowId} ${executionId} failed, task ${taskId} is on hold.`);
@@ -159,8 +188,13 @@ if (flowId === 'triage') {
 	}
 	act(`task ${taskId}: type ${verdict.type}, priority ${verdict.priority}, comment, backlog`, () => {
 		task(['set-type', taskId, verdict.type]);
-		task(['set-priority', taskId, verdict.priority]);
-		comment(taskId, worker, `Triage: type ${verdict.type}, priority ${verdict.priority}.\n\nSummary: ${verdict.summary}\n\nReason: ${verdict.reason}`);
+		// An explicit priority (given by a human or by the PM) is not overwritten: `medium` is the project default, so it is the only value
+		// that means "nobody chose", and only then the triage proposal applies.
+		const currentPriority = currentStatusAndPriority(taskId).priority;
+		const kept = keepsPriority(currentPriority);
+		if (!kept) task(['set-priority', taskId, verdict.priority]);
+		else console.log(`on-flow-event: task ${taskId} keeps its priority "${currentPriority}" (the triage proposed "${verdict.priority}").`);
+		comment(taskId, worker, `Triage: type ${verdict.type}, proposed priority ${verdict.priority}${kept ? ` (kept: ${currentPriority}, chosen before the triage)` : ''}.\n\nSummary: ${verdict.summary}\n\nReason: ${verdict.reason}`);
 		if (PARKED_TYPES.includes(verdict.type)) {
 			comment(taskId, worker, `Parked: a ${verdict.type} has nothing to implement, the factory does not handle it yet. Answer it yourself, then close the task.`);
 			setStatus('on-hold');
