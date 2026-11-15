@@ -143,8 +143,13 @@ if (record.status === 'failed') {
 		console.error(`on-flow-event: integrate ${executionId} failed AFTER the merge of task ${taskId} (CI, packaging or deployment): nothing deployed, see flow show ${executionId} --io.`);
 		process.exit(0);
 	}
+	// No sandbox worker at all is an infrastructure problem, not a problem of the task: say where to look.
+	const noWorker = Object.values(record.steps ?? {}).some((step) => /no worker whose source guarantees/.test(String(step?.error ?? '')));
+	const infrastructureHint = noWorker
+		? ' No sandbox worker could start: check that the sandbox daemon runs ("sbx daemon status", start it with "sbx daemon start"), then "flow worker list" and the daemon log of the day under the flow config folder (logs/).'
+		: '';
 	act(`task ${taskId} on hold: ${flowId} execution ${executionId} failed`, () =>
-		park(taskId, worker, `the ${flowId} run ${executionId} failed. Read it with: flow show ${executionId} --io. Put the task back to its previous status when fixed.`),
+		park(taskId, worker, `the ${flowId} run ${executionId} failed. Read it with: flow show ${executionId} --io.${infrastructureHint} Put the task back to its previous status when fixed.`),
 	);
 	release(taskId, worker);
 	console.log(`on-flow-event: ${flowId} ${executionId} failed, task ${taskId} is on hold.`);
