@@ -76,6 +76,21 @@ describe('student class routes', () => {
     expect(call('GET /student-classes').payload).toEqual([{ id, name: '6A', level: '6th', studentCount: 3 }]);
   });
 
+  it.each([[''], ['   ']])('refuses the name %j on creation and update, naming the field', (name) => {
+    const call = setup(dir);
+    const { id } = call('POST /student-classes', { name: '6A', level: '6th', studentCount: 3 }).payload as {
+      id: string;
+    };
+    const created = call('POST /student-classes', { name, level: '6th', studentCount: 3 });
+    expect(created.status).toBe(400);
+    expect((created.payload as { message: string }).message).toContain('name');
+    const updated = call('PUT /student-classes/:id', { name, level: '5th', studentCount: 4 }, id);
+    expect(updated.status).toBe(400);
+    expect((updated.payload as { message: string }).message).toContain('name');
+    expect(call('PUT /student-classes/:id', { name, level: '5th', studentCount: 4 }, 'nope').status).toBe(400);
+    expect(call('GET /student-classes').payload).toEqual([{ id, name: '6A', level: '6th', studentCount: 3 }]);
+  });
+
   it('answers 404 for an unknown id', () => {
     const call = setup(dir);
     expect(call('PUT /student-classes/:id', { name: 'B', level: '5th', studentCount: 5 }, 'nope').status).toBe(404);
