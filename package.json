@@ -19,6 +19,7 @@
     "clean": "npm run clean --workspace=packages/app-module-school"
   },
   "devDependencies": {
+    "@types/node": "^24.19.2",
     "@wadeck-app/app-core-cli": "latest",
     "@wadeck-app/app-core-sdk": "latest",
     "@wadeck-app/violations-cli": "latest",
