@@ -116,6 +116,17 @@ describe('course routes', () => {
     expect(call('GET /courses').payload).toEqual(before);
   });
 
+  it.each([[''], ['   ']])('answers 400 naming subject for the blank subject %j on create and update', (subject) => {
+    const { id } = call('POST /courses', valid()).payload as { id: string };
+    const created = call('POST /courses', { ...valid(), subject });
+    expect(created.status).toBe(400);
+    expect((created.payload as { message: string }).message).toContain('subject');
+    const updated = call('PUT /courses/:id', { ...valid(), subject }, id);
+    expect(updated.status).toBe(400);
+    expect((updated.payload as { message: string }).message).toContain('subject');
+    expect(call('GET /courses').payload).toEqual([{ id, ...valid() }]);
+  });
+
   it('refuses unknown teacher, unknown class and subject not taught', () => {
     expect(call('POST /courses', { ...valid(), teacherId: 'nope' }).status).toBe(404);
     expect(call('POST /courses', { ...valid(), studentClassId: 'nope' }).status).toBe(404);
