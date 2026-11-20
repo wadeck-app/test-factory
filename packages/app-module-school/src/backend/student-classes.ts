@@ -7,11 +7,17 @@ import type { StudentClass, StudentClassInput } from './types';
 
 export type { StudentClass, StudentClassInput };
 
-// `name` and `level` are non-empty strings; `studentCount` must be an integer >= 0 (strictly a number).
+export const STUDENT_CLASS_NAME_MAX_LENGTH = 80;
+
+// `name` and `level` are non-empty strings (`name` at most 80 characters once trimmed);
+// `studentCount` must be an integer >= 0 (strictly a number).
 export function validateStudentClass(body: unknown): Validation<StudentClassInput> {
   const data = bodyAsObject(body);
   if (typeof data.name !== 'string' || data.name.trim() === '') {
     return { ok: false, message: 'name is required' };
+  }
+  if (data.name.trim().length > STUDENT_CLASS_NAME_MAX_LENGTH) {
+    return { ok: false, message: `name must be at most ${STUDENT_CLASS_NAME_MAX_LENGTH} characters` };
   }
   if (typeof data.level !== 'string' || data.level.trim() === '') {
     return { ok: false, message: 'level is required' };

@@ -108,6 +108,34 @@ describe('student class routes', () => {
     },
   );
 
+  it('accepts a name of 80 characters on creation and update, ignoring padding whitespace', () => {
+    const call = setup(dir);
+    const name = 'a'.repeat(80);
+    const created = call('POST /student-classes', { name: `  ${name}  `, level: '6th', studentCount: 3 });
+    expect(created.status).toBe(201);
+    const { id } = created.payload as { id: string };
+    expect(created.payload).toEqual({ id, name, level: '6th', studentCount: 3 });
+    const newName = 'b'.repeat(80);
+    expect(call('PUT /student-classes/:id', { name: newName, level: '6th', studentCount: 3 }, id).status).toBe(200);
+    expect(call('GET /student-classes').payload).toEqual([{ id, name: newName, level: '6th', studentCount: 3 }]);
+  });
+
+  it('refuses a name of 81 characters on creation and update, naming the field and the limit', () => {
+    const call = setup(dir);
+    const { id } = call('POST /student-classes', { name: '6A', level: '6th', studentCount: 3 }).payload as {
+      id: string;
+    };
+    const name = 'a'.repeat(81);
+    const created = call('POST /student-classes', { name, level: '6th', studentCount: 3 });
+    expect(created.status).toBe(400);
+    expect(created.payload).toEqual({ message: 'name must be at most 80 characters' });
+    const updated = call('PUT /student-classes/:id', { name, level: '6th', studentCount: 3 }, id);
+    expect(updated.status).toBe(400);
+    expect((updated.payload as { message: string }).message).toBe('name must be at most 80 characters');
+    expect(call('PUT /student-classes/:id', { name, level: '6th', studentCount: 3 }, 'nope').status).toBe(400);
+    expect(call('GET /student-classes').payload).toEqual([{ id, name: '6A', level: '6th', studentCount: 3 }]);
+  });
+
   it('answers 404 for an unknown id', () => {
     const call = setup(dir);
     expect(call('PUT /student-classes/:id', { name: 'B', level: '5th', studentCount: 5 }, 'nope').status).toBe(404);
