@@ -97,6 +97,31 @@ describe('teacher routes', () => {
     expect((reply.payload as { message: string }).message).toContain('name');
   });
 
+  it('accepts a name of 80 characters, even with surrounding spaces, on POST and PUT', () => {
+    const call = setup(dir);
+    const name = 'a'.repeat(80);
+    const created = call('POST /teachers', { name: ` ${name} `, subjects: ['Math'] });
+    expect(created.status).toBe(201);
+    expect(created.payload).toMatchObject({ name });
+    const { id } = created.payload as { id: string };
+    const updated = call('PUT /teachers/:id', { name: 'b'.repeat(80), subjects: ['Math'] }, id);
+    expect(updated.status).toBe(200);
+    expect(updated.payload).toEqual({ id, name: 'b'.repeat(80), subjects: ['Math'] });
+  });
+
+  it('answers 400 naming the field and the limit for 81 characters, on POST and PUT, without changing data', () => {
+    const call = setup(dir);
+    const { id } = call('POST /teachers', { name: 'Ada', subjects: ['Math'] }).payload as { id: string };
+    const long = 'a'.repeat(81);
+    const created = call('POST /teachers', { name: long, subjects: ['Math'] });
+    expect(created.status).toBe(400);
+    expect(created.payload).toMatchObject({ message: 'name must be at most 80 characters' });
+    const updated = call('PUT /teachers/:id', { name: long, subjects: ['Math'] }, id);
+    expect(updated.status).toBe(400);
+    expect(updated.payload).toMatchObject({ message: 'name must be at most 80 characters' });
+    expect(call('GET /teachers').payload).toEqual([{ id, name: 'Ada', subjects: ['Math'] }]);
+  });
+
   it('answers 404 for an unknown id', () => {
     const call = setup(dir);
     expect(call('PUT /teachers/:id', { name: 'Bob', subjects: ['Art'] }, 'nope').status).toBe(404);

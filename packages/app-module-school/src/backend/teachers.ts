@@ -6,11 +6,16 @@ import type { Teacher, TeacherInput } from './types';
 
 export type { Teacher, TeacherInput };
 
+export const TEACHER_NAME_MAX = 80;
+
 // `subjects` is a list of strings; a comma separated string (as sent by the form) is split into one.
 export function validateTeacher(body: unknown): Validation<TeacherInput> {
   const data = bodyAsObject(body);
   if (typeof data.name !== 'string' || data.name.trim() === '') {
     return { ok: false, message: 'name is required' };
+  }
+  if (data.name.trim().length > TEACHER_NAME_MAX) {
+    return { ok: false, message: `name must be at most ${TEACHER_NAME_MAX} characters` };
   }
   const raw = typeof data.subjects === 'string' ? data.subjects.split(',') : data.subjects;
   if (!Array.isArray(raw)) {
