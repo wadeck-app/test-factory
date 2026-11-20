@@ -19,7 +19,9 @@ import type { Course, CourseInput } from './types';
 
 export type { Course, CourseInput };
 
-// `subject`, `teacherId` and `studentClassId` are non-empty strings.
+const MAX_SUBJECT_LENGTH = 80;
+
+// `subject`, `teacherId` and `studentClassId` are non-empty strings; `subject` has at most 80 characters.
 export function validateCourse(body: unknown): Validation<CourseInput> {
   const data = bodyAsObject(body);
   for (const field of ['subject', 'teacherId', 'studentClassId'] as const) {
@@ -27,6 +29,9 @@ export function validateCourse(body: unknown): Validation<CourseInput> {
     if (typeof value !== 'string' || value.trim() === '') {
       return { ok: false, message: `${field} is required` };
     }
+  }
+  if ((data.subject as string).trim().length > MAX_SUBJECT_LENGTH) {
+    return { ok: false, message: `subject must be at most ${MAX_SUBJECT_LENGTH} characters` };
   }
   return {
     ok: true,
