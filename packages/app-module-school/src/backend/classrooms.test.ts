@@ -112,6 +112,36 @@ describe('classroom routes', () => {
     expect(file()).toBe(before);
   });
 
+  it('accepts a name of 80 characters, trimmed, on creation and update', () => {
+    const call = setup(dir);
+    const name = 'x'.repeat(80);
+    const created = call('POST /classrooms', { name: ` ${name} `, capacity: 30 });
+    expect(created.status).toBe(201);
+    expect(created.payload).toMatchObject({ name });
+    const { id } = call('POST /classrooms', { name: 'A1', capacity: 30 }).payload as { id: string };
+    const put = call('PUT /classrooms/:id', { name, capacity: 30 }, id);
+    expect(put.status).toBe(200);
+    expect(put.payload).toMatchObject({ name });
+  });
+
+  it('refuses a name of 81 characters naming the field and the limit, without changing data', () => {
+    const call = setup(dir);
+    const file = () => readFileSync(join(dir, 'classrooms.json'), 'utf8');
+    const { id } = call('POST /classrooms', { name: 'A1', capacity: 30 }).payload as { id: string };
+    const before = file();
+    const name = 'x'.repeat(81);
+
+    const post = call('POST /classrooms', { name, capacity: 30 });
+    expect(post.status).toBe(400);
+    expect(post.payload).toMatchObject({ message: 'name must be at most 80 characters' });
+
+    const put = call('PUT /classrooms/:id', { name, capacity: 30 }, id);
+    expect(put.status).toBe(400);
+    expect(put.payload).toMatchObject({ message: 'name must be at most 80 characters' });
+
+    expect(file()).toBe(before);
+  });
+
   it('answers 404 for an unknown id', () => {
     const call = setup(dir);
     expect(call('PUT /classrooms/:id', { name: 'B', capacity: 5 }, 'nope').status).toBe(404);
