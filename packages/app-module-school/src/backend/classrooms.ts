@@ -6,12 +6,17 @@ import type { Classroom, ClassroomInput } from './types';
 
 export type { Classroom, ClassroomInput };
 
+const MAX_NAME_LENGTH = 80;
+
 // `capacity` must be a positive integer (strictly a number, like `studentCount` of a student class).
 // `building` is optional and defaults to an empty string.
 export function validateClassroom(body: unknown): Validation<ClassroomInput> {
   const data = bodyAsObject(body);
   if (typeof data.name !== 'string' || data.name.trim() === '') {
     return { ok: false, message: 'name is required' };
+  }
+  if (data.name.trim().length > MAX_NAME_LENGTH) {
+    return { ok: false, message: `name must be at most ${MAX_NAME_LENGTH} characters` };
   }
   const { capacity } = data;
   if (typeof capacity !== 'number' || !Number.isInteger(capacity) || capacity <= 0) {
