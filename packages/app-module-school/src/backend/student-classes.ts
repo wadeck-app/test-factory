@@ -28,8 +28,14 @@ export function validateStudentClass(body: unknown): Validation<StudentClassInpu
   return { ok: true, value: { name: data.name.trim(), level: data.level.trim(), studentCount: data.studentCount } };
 }
 
+const DUPLICATE_NAME_MESSAGE = 'name already used by another class';
+
+const sameName = (a: string, b: string): boolean => a.trim().toLowerCase() === b.trim().toLowerCase();
+
 export function registerStudentClassRoutes(ctx: ModuleContext, store: Store): void {
   const studentClasses = (): CollectionStore => store.collection('classes');
+  const isNameTaken = (name: string, exceptId?: string): boolean =>
+    (studentClasses().list() as unknown as StudentClass[]).some((c) => c.id !== exceptId && sameName(c.name, name));
 
   ctx.registerRoute('GET', '/student-classes', (_req, reply) => reply.send(studentClasses().list()));
 
@@ -37,6 +43,9 @@ export function registerStudentClassRoutes(ctx: ModuleContext, store: Store): vo
     const result = validateStudentClass(req.body);
     if (!result.ok) {
       return badRequest(reply, result.message);
+    }
+    if (isNameTaken(result.value.name)) {
+      return refuseConflict(reply, DUPLICATE_NAME_MESSAGE);
     }
     return reply.code(201).send(studentClasses().create(result.value));
   });
@@ -49,6 +58,9 @@ export function registerStudentClassRoutes(ctx: ModuleContext, store: Store): vo
     const current = studentClasses().get(req.params.id) as unknown as StudentClass | undefined;
     if (!current) {
       return notFound(reply, 'student class not found');
+    }
+    if (isNameTaken(result.value.name, current.id)) {
+      return refuseConflict(reply, DUPLICATE_NAME_MESSAGE);
     }
     // only a bigger class can break the schedule
     const conflict =
