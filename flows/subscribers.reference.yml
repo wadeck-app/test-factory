@@ -5,7 +5,7 @@
 #
 # ACTIVE since 2026-11-14 for all roles (triage, plan, build, integrate), added with `queue sub add`:
 #   global  (~/.config/queue/subscribers.yml)                  flow.execution.completed / flow.execution.failed  when payload.projectId=b3675f3d
-#   project (<registry>/projects/b3675f3d/queue/config/...)    onTaskCreated, onStatusChange when payload.newStatus=backlog
+#   project (<registry>/projects/b3675f3d-test-factory/queue/config/...)    onTaskCreated, onStatusChange when payload.newStatus=backlog
 # Remove them with: queue sub remove <event> --name <name>   (test-factory-completed, test-factory-failed, test-factory-created, test-factory-backlog)
 #
 # Do not set QUEUE_SDK_OFF=1 in a shell that starts the flow daemon: the daemon inherits it and its events never reach the queue
