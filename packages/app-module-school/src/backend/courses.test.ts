@@ -85,6 +85,37 @@ describe('course routes', () => {
     expect(call('PUT /courses/:id', { ...valid(), teacherId: 3 }, id).status).toBe(400);
   });
 
+  it('accepts a subject of 80 characters, trimmed, on creation and update', () => {
+    const subject = 'x'.repeat(80);
+    const long = (call('POST /teachers', { name: 'Eve', subjects: ['Math', subject] }).payload as { id: string }).id;
+    const created = call('POST /courses', { subject: ` ${subject} `, teacherId: long, studentClassId: classId });
+    expect(created.status).toBe(201);
+    expect(created.payload).toMatchObject({ subject });
+    const { id } = call('POST /courses', valid()).payload as { id: string };
+    const put = call('PUT /courses/:id', { subject, teacherId: long, studentClassId: classId }, id);
+    expect(put.status).toBe(200);
+    expect(put.payload).toMatchObject({ subject });
+  });
+
+  it('refuses a subject of 81 characters naming the field and the limit, without changing data', () => {
+    const subject = 'x'.repeat(81);
+    const long = (call('POST /teachers', { name: 'Eve', subjects: ['Math', subject] }).payload as { id: string }).id;
+    const { id } = call('POST /courses', valid()).payload as { id: string };
+    const before = call('GET /courses').payload;
+    const body = { subject, teacherId: long, studentClassId: classId };
+
+    const post = call('POST /courses', body);
+    expect(post.status).toBe(400);
+    expect(post.payload).toEqual({ message: 'subject must be at most 80 characters' });
+
+    const put = call('PUT /courses/:id', body, id);
+    expect(put.status).toBe(400);
+    expect(put.payload).toEqual({ message: 'subject must be at most 80 characters' });
+
+    expect(call('PUT /courses/:id', body, 'nope').status).toBe(400);
+    expect(call('GET /courses').payload).toEqual(before);
+  });
+
   it('refuses unknown teacher, unknown class and subject not taught', () => {
     expect(call('POST /courses', { ...valid(), teacherId: 'nope' }).status).toBe(404);
     expect(call('POST /courses', { ...valid(), studentClassId: 'nope' }).status).toBe(404);
