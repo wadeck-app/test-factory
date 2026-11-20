@@ -136,6 +136,45 @@ describe('student class routes', () => {
     expect(call('GET /student-classes').payload).toEqual([{ id, name: '6A', level: '6th', studentCount: 3 }]);
   });
 
+  it('refuses a duplicate name on creation, ignoring case, naming the field', () => {
+    const call = setup(dir);
+    const { id } = call('POST /student-classes', { name: '6A', level: '6th', studentCount: 3 }).payload as {
+      id: string;
+    };
+    for (const name of ['6A', '6a', ' 6a ']) {
+      const res = call('POST /student-classes', { name, level: '5th', studentCount: 1 });
+      expect(res.status).toBe(409);
+      expect((res.payload as { message: string }).message).toContain('name');
+    }
+    expect(call('GET /student-classes').payload).toEqual([{ id, name: '6A', level: '6th', studentCount: 3 }]);
+    expect(call('POST /student-classes', { name: '6B', level: '6th', studentCount: 1 }).status).toBe(201);
+  });
+
+  it('refuses renaming to another class name, ignoring case, but allows own name and case change', () => {
+    const call = setup(dir);
+    const { id } = call('POST /student-classes', { name: '6A', level: '6th', studentCount: 3 }).payload as {
+      id: string;
+    };
+    call('POST /student-classes', { name: '6B', level: '6th', studentCount: 3 });
+    for (const name of ['6B', '6b']) {
+      const res = call('PUT /student-classes/:id', { name, level: '6th', studentCount: 3 }, id);
+      expect(res.status).toBe(409);
+      expect((res.payload as { message: string }).message).toContain('name');
+    }
+    expect(call('PUT /student-classes/:id', { name: '6A', level: '5th', studentCount: 4 }, id).status).toBe(200);
+    expect(call('PUT /student-classes/:id', { name: '6a', level: '5th', studentCount: 4 }, id).status).toBe(200);
+    expect((call('GET /student-classes').payload as { name: string }[])[0].name).toBe('6a');
+  });
+
+  it('frees the name of a deleted class', () => {
+    const call = setup(dir);
+    const { id } = call('POST /student-classes', { name: '6A', level: '6th', studentCount: 3 }).payload as {
+      id: string;
+    };
+    call('DELETE /student-classes/:id', undefined, id);
+    expect(call('POST /student-classes', { name: '6a', level: '6th', studentCount: 3 }).status).toBe(201);
+  });
+
   it('answers 404 for an unknown id', () => {
     const call = setup(dir);
     expect(call('PUT /student-classes/:id', { name: 'B', level: '5th', studentCount: 5 }, 'nope').status).toBe(404);

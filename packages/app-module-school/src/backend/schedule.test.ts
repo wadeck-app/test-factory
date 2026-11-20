@@ -326,7 +326,7 @@ describe('edits that would break the schedule', () => {
     expect(call('PUT /student-classes/:id', body(10), 'nope').status).toBe(404);
     expect(call('PUT /student-classes/:id', { ...body(10), name: '' }, class24).status).toBe(400);
     const lone = idOf(call('POST /student-classes', { name: '6Z', level: '6', studentCount: 5 }));
-    expect(call('PUT /student-classes/:id', body(500), lone).status).toBe(200);
+    expect(call('PUT /student-classes/:id', { ...body(500), name: '6Z' }, lone).status).toBe(200);
   });
 
   it('names the broken entry when a course changes to a clashing teacher or class', () => {
